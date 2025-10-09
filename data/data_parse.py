@@ -16,7 +16,8 @@ class ModInfoParser:
         res = {}
         res.update(self.get_title())
         res.update(self.get_tag())
-        res.update(self.get_categories())
+        # 弃用
+        # res.update(self.get_categories())
         res.update(self.get_votes())
         res.update(self.get_view_count())
         res.update(self.get_mc_versions())
@@ -373,10 +374,3 @@ class ModInfoParser:
             img_url = f'https:{img_url}'  # 或 'http:' 取决于网站支持
         res['img-url'] = img_url
         return res
-
-
-if __name__ == '__main__':
-    with open('output/page_1.html', 'r', encoding='utf-8') as file:
-        content = file.read()
-        info = ModInfoParser(content).gather_info()
-        print(info)
