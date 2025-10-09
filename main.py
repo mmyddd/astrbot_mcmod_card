@@ -13,7 +13,7 @@ from .img.draw_img import generate_mod_cards
 
 MCMOD_MOD_PATTERN=r"https://www\.mcmod\.cn/class/(\d+)\.html"
 
-@register("helloworld", "YourName", "一个简单的 Hello World 插件", "1.0.0")
+@register("mcmod_card", "QiChen", "MC百科卡片解析", "1.0.0")
 class MyPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
