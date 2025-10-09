@@ -2,6 +2,8 @@ import aiohttp
 import asyncio
 import time
 
+from data.data_parse import ModInfoParser
+
 
 async def fetch_html(session, url, timeout=10):
     """
@@ -41,7 +43,8 @@ async def fetch_html(session, url, timeout=10):
 async def main():
     # 要爬取的网页URL
     urls = [
-        "https://www.mcmod.cn/class/1796.html"
+        "https://www.mcmod.cn/class/1796.html",
+        "https://www.mcmod.cn/class/260.html"
     ]
 
     start_time = time.time()
@@ -53,7 +56,8 @@ async def main():
         for i, url in enumerate(urls):
             # 获取HTML
             html = await fetch_html(session, url)
-
+            mod_info_parser = ModInfoParser(html_content=html)
+            print(mod_info_parser.gather_info())
 
         # 等待所有保存任务完成
         await asyncio.gather(*tasks)
