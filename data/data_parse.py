@@ -23,6 +23,7 @@ class ModInfoParser:
         res.update(self.get_modpack_count())
         res.update(self.get_authors())
         res.update(self.get_rating())
+        res.update(self.get_img_url())
         return res
 
     def get_title(self) -> dict[str, str]:
@@ -348,6 +349,29 @@ class ModInfoParser:
                 if num_match and key_cn in cn_to_en:
                     res[cn_to_en[key_cn]] = int(num_match.group())
 
+        return res
+
+    def get_img_url(self):
+        res={
+            'img-url':''
+        }
+        # 定位包含图片的div容器
+        cover_div = self.soup.select_one('div.class-cover-image')
+        if not cover_div:
+            return ""
+
+        # 从div中找到img标签
+        img_tag = cover_div.find('img')
+        if not img_tag:
+            return ""
+
+        # 提取图片链接（src属性）
+        img_url = img_tag.get('src', '')
+
+        # 处理可能的相对路径，补充协议头（如果需要）
+        if img_url.startswith('//'):
+            img_url = f'https:{img_url}'  # 或 'http:' 取决于网站支持
+        res['img-url'] = img_url
         return res
 
 
