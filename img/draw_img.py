@@ -11,6 +11,7 @@ from pathlib import Path
 # 需要安装 matplotlib: pip install matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
+import base64
 
 # ----------------- 数据和配置 (Data and Configuration) -----------------
 
@@ -431,14 +432,13 @@ def generate_mod_cards(data_list):
     # ---- 3. 合成并保存 (Composite and Save) ----
     # 将绘制内容与渐变背景合成
     final_image = Image.alpha_composite(background.convert('RGBA'), canvas)
-    output_filename = "mod_showcase_color_final.png"
-    try:
-        final_image.save(output_filename)
-        print(f"图片已成功生成并保存为 '{output_filename}'")
-    except Exception as e:
-        print(f"图片保存失败: {e}")
+    buf = io.BytesIO()
+    final_image.save(buf, format='PNG')
+    img_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+    return img_base64
 
 
 if __name__ == "__main__":
     # 当脚本直接被执行时，调用主函数
-    generate_mod_cards(MOD_DATA)
+    base64_str = generate_mod_cards(MOD_DATA)
+    print(base64_str)

@@ -1,8 +1,6 @@
 import aiohttp
 import asyncio
-import time
-
-from data.data_parse import ModInfoParser
+from .data_parse import ModInfoParser
 
 
 async def fetch_html(session, url, timeout=10):
@@ -40,33 +38,17 @@ async def fetch_html(session, url, timeout=10):
         return None
 
 
-async def main():
-    # 要爬取的网页URL
-    urls = [
-        "https://www.mcmod.cn/class/1796.html",
-        "https://www.mcmod.cn/class/260.html"
-    ]
-
-    start_time = time.time()
-
+async def gather_data(url):
     # 创建会话对象
     async with aiohttp.ClientSession() as session:
-        # 并发爬取所有URL
-        tasks = []
-        for i, url in enumerate(urls):
-            # 获取HTML
-            html = await fetch_html(session, url)
-            mod_info_parser = ModInfoParser(html_content=html)
-            info_ = await mod_info_parser.gather_info()
-            print(info_)
+        html = await fetch_html(session, url)
+        mod_info_parser = ModInfoParser(html_content=html)
+        info_ = await mod_info_parser.gather_info()
+        print(info_)
+        return info_
 
-        # 等待所有保存任务完成
-        await asyncio.gather(*tasks)
-
-    end_time = time.time()
-    print(f"\n爬取完成，耗时: {end_time - start_time:.2f}秒")
 
 
 if __name__ == "__main__":
     # 运行异步主函数
-    asyncio.run(main())
+    asyncio.run(gather_data('https://www.mcmod.cn/class/1796.html'))
