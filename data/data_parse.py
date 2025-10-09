@@ -12,7 +12,7 @@ class ModInfoParser:
         """
         self.soup = BeautifulSoup(html_content, 'html.parser')
 
-    def gather_info(self):
+    async def gather_info(self):
         res = {}
         res.update(self.get_title())
         res.update(self.get_tag())

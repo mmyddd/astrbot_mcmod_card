@@ -57,7 +57,8 @@ async def main():
             # 获取HTML
             html = await fetch_html(session, url)
             mod_info_parser = ModInfoParser(html_content=html)
-            print(mod_info_parser.gather_info())
+            info_ = await mod_info_parser.gather_info()
+            print(info_)
 
         # 等待所有保存任务完成
         await asyncio.gather(*tasks)
