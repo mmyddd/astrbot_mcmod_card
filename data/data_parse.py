@@ -34,7 +34,8 @@ class ModInfoParser:
         """
         res = {
             'status': '',
-            'name': ''
+            'name': {
+            }
         }
         
         # 查找标题容器
@@ -55,20 +56,18 @@ class ModInfoParser:
         # 解析名称信息
         # 短名称
         short_name = title_div.select_one('span.short-name')
-        name=''
         if short_name:
-            name+=short_name.get_text(strip=True)
+            res['name']['short-name']=short_name.get_text(strip=True)
         
         # 中文名称
         chinese_name = title_div.select_one('h3')
         if chinese_name:
-            name+=' '+chinese_name.get_text(strip=True)
+            res['name']['chinese-name']=chinese_name.get_text(strip=True)
         
         # 英文名称
         english_name = title_div.select_one('h4')
         if english_name:
-            name+=' '+english_name.get_text(strip=True)
-        res['name']=name
+            res['name']['english-name']=english_name.get_text(strip=True)
         return res
 
     def get_tag(self) -> dict[str, list[str]]:
