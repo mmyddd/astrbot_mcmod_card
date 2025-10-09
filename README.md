@@ -1,9 +1,13 @@
-# helloworld
+# MCMod Card
 
-AstrBot 插件模板
+AstrBot插件,检测MCMod链接并解析为卡片发送
 
-A template plugin for AstrBot plugin feature
+目前仅支持Mod解析
 
-# 支持
+# TODO
 
-[帮助文档](https://astrbot.app)
+- [ ] 支持整合包解析
+- [ ] 支持自定义渲染
+- [ ] 支持本地缓存
+- [ ] 修复雷达图显示,改为相对值而非绝对值
+- [ ] 提升解析速度
