@@ -433,7 +433,7 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         else:
             current_y += 10
 
-        # 简介区域高度（使用与绘制阶段相同的段落换行逻辑）
+                # 简介区域高度（使用与实际绘制相同的段落换行逻辑）
         desc = mod.get('description', '')
         if desc:
             # 矩形背景宽度（左右各留30px）
@@ -443,20 +443,22 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
             # 文本实际可用宽度
             text_max_width = desc_rect_width - 2 * desc_margin
 
-            # 按段落分割
+            # 按段落分割（保留原文本中的换行符）
             paragraphs = desc.split('\n')
             all_lines = []
             for para in paragraphs:
                 if not para.strip():
                     continue
+                # 对每个段落进行自动换行
                 para_lines = wrap_text(para, font_sm, text_max_width, dummy_draw)
                 if para_lines:
                     all_lines.extend(para_lines)
-                    all_lines.append('')  # 段落间空行
+                    all_lines.append('')  # 段落之间加一个空行
+            # 移除最后一个多余的空行
             if all_lines and all_lines[-1] == '':
                 all_lines.pop()
 
-            # 计算矩形高度
+            # 计算矩形高度：行数 * 行高 + 上下边距
             desc_height = len(all_lines) * line_height_sm + desc_margin * 2
         else:
             desc_height = 0
