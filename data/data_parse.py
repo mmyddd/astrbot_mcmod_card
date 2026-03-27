@@ -33,6 +33,7 @@ class ModInfoParser(BaseParser):
         res.update(self.get_authors())
         res.update(self.get_rating())
         res.update(self.get_img_url())
+        res.update(self.get_description())
         return res
 
     def get_title(self):
@@ -164,6 +165,14 @@ class ModInfoParser(BaseParser):
                 url = 'https:' + url
             res['img-url'] = url
         return res
+    
+    def get_description(self):
+        """解析模组简介"""
+        desc_div = self.soup.select_one('div.class-description')
+        if desc_div:
+            # 去除 HTML 标签，保留纯文本
+            return {'description': desc_div.get_text(strip=True)}
+        return {'description': ''}
 
 
 class ModpackInfoParser(BaseParser):
@@ -177,6 +186,7 @@ class ModpackInfoParser(BaseParser):
         res.update(self.get_mc_versions())
         res.update(self.get_authors())
         res.update(self.get_img_url())
+        res.update(self.get_description())
         # 整合包没有雷达图评分，但可设置默认值或留空，绘图时会忽略
         res.update({'modpack_count': '', 'votes': {'red_count': '0', 'red_percentage': '0%', 'black_count': '0', 'black_percentage': '0%'}})
         return res
@@ -256,3 +266,9 @@ class ModpackInfoParser(BaseParser):
                 url = 'https:' + url
             res['img-url'] = url
         return res
+    
+    def get_description(self):
+        desc_div = self.soup.select_one('div.modpack-description') or self.soup.select_one('div.summary')
+        if desc_div:
+            return {'description': desc_div.get_text(strip=True)}
+        return {'description': ''}
