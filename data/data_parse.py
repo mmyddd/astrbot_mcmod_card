@@ -205,13 +205,12 @@ class ModInfoParser(BaseParser):
                     texts.extend(extract_text(child))
             return texts
     
-    raw_texts = extract_text(desc_div)
-    full_text = ''.join(raw_texts)
-    # 将多个连续换行合并为单个换行，并去除首尾空白
-    import re
-    full_text = re.sub(r'\n+', '\n', full_text).strip()
-    logger.debug(f"解析到简介，总长度: {len(full_text)}")
-    return {'description': full_text}
+        raw_texts = extract_text(desc_div)
+        full_text = ''.join(raw_texts)
+        # 将多个连续换行合并为单个换行，并去除首尾空白
+        full_text = re.sub(r'\n+', '\n', full_text).strip()
+        logger.debug(f"解析到简介，总长度: {len(full_text)}")
+        return {'description': full_text}
 
     def get_heat_index(self):
         heat_div = self.soup.select_one('div.block-right .text')
