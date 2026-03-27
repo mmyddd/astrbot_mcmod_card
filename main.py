@@ -29,15 +29,15 @@ class McmodCardPlugin(Star):
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
     def _init_font_path(self):
-        """固定字体路径，不允许用户自定义"""
-        base_dir = Path(__file__).resolve().parent.parent.parent  # AstrBot 根目录
-        font_path = base_dir / "resource" / "msyh.ttf"
+        """固定字体路径：插件目录下的 resource/msyh.ttf"""
+        plugin_dir = Path(__file__).resolve().parent
+        font_path = plugin_dir / "resource" / "msyh.ttf"
         if font_path.exists():
             self.font_path = str(font_path)
             logger.info(f"使用固定字体: {self.font_path}")
         else:
             self.font_path = None
-            logger.warning("固定字体文件 msyh.ttf 不存在，卡片文字将使用默认字体（可能无法显示中文）")
+            logger.warning(f"固定字体文件不存在: {font_path}，卡片文字将使用默认字体（可能无法显示中文）")
 
     async def parse_mcmod(self, event: AstrMessageEvent, url: str, content_type: str):
         try:

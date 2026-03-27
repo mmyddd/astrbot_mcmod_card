@@ -1,16 +1,4 @@
 {
-  "font_path": {
-    "description": "中文字体文件路径（推荐使用完整路径）",
-    "type": "string",
-    "default": "",
-    "hint": "留空则自动在 resource 目录查找 msyh.ttf、simhei.ttf、simsun.ttc。"
-  },
-  "font_bold_path": {
-    "description": "加粗字体文件路径（可选，若不填则使用普通字体）",
-    "type": "string",
-    "default": "",
-    "hint": "如果留空，将使用普通字体代替。"
-  },
   "cache_ttl": {
     "description": "数据缓存有效期（秒）",
     "type": "int",
