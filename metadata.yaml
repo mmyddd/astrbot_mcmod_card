@@ -1,5 +1,18 @@
-name: mcmod_card # 这是你的插件的唯一识别名。
-desc: MC百科卡片解析 # 插件简短描述
-version: v1.0.0 # 插件版本号。格式：v1.1.1 或者 v1.1
-author: QiChenSn # 作者
-repo: https://github.com/QiChenSn/astrbot_mcmod_card # 插件的仓库地址
+name: mcmod_card
+display_name: MC百科卡片
+desc: MC百科卡片解析 (支持模组+整合包)
+version: v2.0.0  # 改为 2.0.0
+author: QiChenSn
+repo: https://github.com/QiChenSn/astrbot_mcmod_card
+support_platforms:
+  - aiocqhttp
+  - qq_official
+  - telegram
+  - discord
+  - wecom
+  - lark
+  - dingtalk
+  - kook
+  - satori
+  - line
+astrbot_version: ">=4.16"
