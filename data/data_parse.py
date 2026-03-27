@@ -211,6 +211,7 @@ class ModInfoParser(BaseParser):
 
 
 class ModpackInfoParser(BaseParser):
+    """整合包信息解析器（适用于 /modpack/ 页面）"""
     async def gather_info(self):
         res = {}
         res.update(self.get_title())
@@ -221,14 +222,96 @@ class ModpackInfoParser(BaseParser):
         res.update(self.get_authors())
         res.update(self.get_img_url())
         res.update(self.get_description())
-        # 添加热度指数和评分（整合包页面有）
-        res.update(self.get_heat_index())
-        res.update(self.get_rating_score())
-        # 整合包没有 modpack_count 字段，设置为空
-        res['modpack_count'] = ''
+        # 整合包没有雷达图评分，设置默认值
+        res.update({'modpack_count': '', 'votes': {'red_count': '0', 'red_percentage': '0%', 'black_count': '0', 'black_percentage': '0%'}})
+        # 热度字段可能不存在
+        res.update({'heat_index': '', 'rating_score': '', 'rating_level': ''})
         logger.debug(f"解析结果: {res}")
         return res
 
+    def get_title(self):
+        res = {'status': '', 'name': {}}
+        title_div = self.soup.select_one('div.modpack-title') or self.soup.select_one('div.class-title')
+        if title_div:
+            name_elem = title_div.select_one('h1') or title_div.select_one('h3')
+            if name_elem:
+                res['name']['chinese-name'] = name_elem.get_text(strip=True)
+            short = title_div.select_one('span.short-name')
+            if short:
+                res['name']['short-name'] = short.get_text(strip=True)
+            status = title_div.select_one('div.modpack-status')
+            if status:
+                res['status'] = status.get_text(strip=True)
+        return res
+
+    def get_tag(self):
+        res = {'tags': []}
+        tag_area = self.soup.select_one('div.tag-list') or self.soup.select_one('li.col-lg-12.tag')
+        if tag_area:
+            tags = [a.get_text(strip=True) for a in tag_area.select('a') if a.get_text(strip=True)]
+            res['tags'] = tags
+        return res
+
+    def get_votes(self):
+        return ModInfoParser.get_votes(self)
+
+    def get_view_count(self):
+        res = {'view_count': ''}
+        for el in self.soup.select('div.span'):
+            if el.select_one('p.t') and '总浏览' in el.select_one('p.t').get_text(strip=True):
+                count_el = el.select_one('p.n')
+                if count_el:
+                    res['view_count'] = count_el.get_text(strip=True)
+                break
+        return res
+
+    def get_mc_versions(self):
+        res = {'mc_versions': {}}
+        version_area = self.soup.select_one('li.col-lg-12.mcver') or self.soup.select_one('div.modpack-versions')
+        if version_area:
+            versions = []
+            for a in version_area.select('a'):
+                text = a.get_text(strip=True)
+                if re.match(r'^\d+\.\d+(\.\d+)?$', text):
+                    versions.append(text)
+            if versions:
+                res['mc_versions']['Minecraft'] = versions
+        return res
+
+    def get_authors(self):
+        res = {'authors': []}
+        author_area = self.soup.select_one('li.col-lg-12.author') or self.soup.select_one('div.modpack-author')
+        if author_area:
+            names = [a.get_text(strip=True) for a in author_area.select('a')]
+            if names:
+                res['authors'] = names
+        return res
+
+    def get_img_url(self):
+        res = {'img-url': ''}
+        cover = self.soup.select_one('div.modpack-cover img') or self.soup.select_one('div.class-cover-image img')
+        if cover and cover.get('src'):
+            url = cover['src']
+            if url.startswith('//'):
+                url = 'https:' + url
+            res['img-url'] = url
+        return res
+
+    def get_description(self):
+        # 对于模组页面，仍使用原有逻辑（类中已处理，但这个方法只在整合包中调用，所以没问题）
+        # 查找整合包介绍所在的标签页
+        intro_li = self.soup.select_one('li.text-area[data-id="1"]')
+        if intro_li:
+            text = intro_li.get_text(separator=' ', strip=True)
+            if text:
+                return {'description': text}
+        # 回退：如果有 modpack-description 或 summary
+        desc_div = self.soup.select_one('div.modpack-description') or self.soup.select_one('div.summary')
+        if desc_div:
+            return {'description': desc_div.get_text(strip=True)}
+        return {'description': ''}
+    
+    
     # 添加 get_heat_index 方法
     def get_heat_index(self):
         heat_div = self.soup.select_one('div.block-right .text')
