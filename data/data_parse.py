@@ -27,6 +27,7 @@ class ModInfoParser(BaseParser):
         res.update(self.get_description())
         res.update(self.get_heat_index())
         res.update(self.get_rating_score())
+        logger.debug(f"解析结果: {res}")
         return res
 
     def get_title(self):
@@ -215,6 +216,7 @@ class ModpackInfoParser(BaseParser):
         res.update({'modpack_count': '', 'votes': {'red_count': '0', 'red_percentage': '0%', 'black_count': '0', 'black_percentage': '0%'}})
         # 热度字段可能不存在
         res.update({'heat_index': '', 'rating_score': '', 'rating_level': ''})
+        logger.debug(f"解析结果: {res}")
         return res
 
     def get_title(self):
