@@ -172,17 +172,24 @@ def generate_mod_cards(data_list, config=None):
     canvas = Image.new('RGBA', (img_width, img_height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(canvas)
 
-    # 加载字体
+    # 加载字体（增强版）
     font_path = cfg.get("font_path")
     font_bold_path = cfg.get("font_bold_path", font_path)
     try:
         if font_path and Path(font_path).exists():
             font_sm = ImageFont.truetype(font_path, 16)
             font_md = ImageFont.truetype(font_path, 20)
-            font_lg_bold = ImageFont.truetype(font_bold_path or font_path, 28) if (font_bold_path or font_path) else ImageFont.load_default()
+            if font_bold_path and Path(font_bold_path).exists():
+                font_lg_bold = ImageFont.truetype(font_bold_path, 28)
+            else:
+                font_lg_bold = ImageFont.truetype(font_path, 28)
             font_tag = ImageFont.truetype(font_path, 16)
+            logger.debug(f"字体加载成功: {font_path}")
         else:
-            logger.warning("未找到中文字体，使用默认字体，可能导致中文显示异常")
+            if font_path:
+                logger.warning(f"配置的字体路径不存在或为空: {font_path}")
+            else:
+                logger.warning("未配置字体路径，使用默认字体")
             font_sm = font_md = font_lg_bold = font_tag = ImageFont.load_default()
     except Exception as e:
         logger.error(f"字体加载失败: {e}，使用默认字体")

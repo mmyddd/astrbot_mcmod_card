@@ -20,7 +20,7 @@ class McmodCardPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
-        self.plugin_name = self.name  # 插件标识名，用于数据目录
+        self.plugin_name = self.name
         self._init_data_dir()
         self._init_font_paths()
 
@@ -28,24 +28,46 @@ class McmodCardPlugin(Star):
         base = Path(get_astrbot_data_path()) / "plugin_data" / self.plugin_name
         self.data_dir = base
         self.data_dir.mkdir(parents=True, exist_ok=True)
-    
+
     def _init_font_paths(self):
-        """处理字体路径，若配置为空则自动查找"""
-        if not self.config.get("font_path"):
-            # 尝试在 AstrBot 的 resource 目录查找常见字体
-            base_dir = Path(__file__).resolve().parent.parent.parent
-            font_candidates = [
-                base_dir / "resource" / "msyh.ttf",
-                base_dir / "resource" / "simhei.ttf",
-                base_dir / "resource" / "simsun.ttc",
-            ]
-            for f in font_candidates:
-                if f.exists():
-                    self.config["font_path"] = str(f)
-                    if not self.config.get("font_bold_path"):
-                        self.config["font_bold_path"] = str(f)
-                    break
-        # 如果仍然没有，保留空字符串，绘图时会使用默认字体
+        """处理字体路径，若配置为空或无效则自动查找"""
+        font_path = self.config.get("font_path")
+        # 如果配置了路径，先检查是否存在
+        if font_path:
+            p = Path(font_path)
+            if p.exists():
+                logger.info(f"使用配置的字体: {font_path}")
+                if not self.config.get("font_bold_path"):
+                    self.config["font_bold_path"] = font_path
+                return
+            else:
+                logger.warning(f"配置的字体文件不存在: {font_path}，将尝试自动查找")
+
+        # 自动查找字体
+        base_dir = Path(__file__).resolve().parent.parent.parent  # AstrBot 根目录
+        candidates = [
+            base_dir / "resource" / "msyh.ttf",
+            base_dir / "resource" / "simhei.ttf",
+            base_dir / "resource" / "simsun.ttc",
+        ]
+        # 若用户之前配置了路径但无效，也尝试在其目录下查找同名文件
+        if font_path:
+            parent = Path(font_path).parent
+            candidates.insert(0, parent / "msyh.ttf")
+            candidates.insert(0, parent / "simhei.ttf")
+
+        for f in candidates:
+            if f.exists():
+                self.config["font_path"] = str(f)
+                if not self.config.get("font_bold_path"):
+                    self.config["font_bold_path"] = str(f)
+                logger.info(f"自动选用字体: {f}")
+                return
+
+        # 仍未找到
+        self.config["font_path"] = ""
+        self.config["font_bold_path"] = ""
+        logger.warning("未找到任何中文字体，卡片文字将使用默认字体（可能无法显示中文）")
 
     async def parse_mcmod(self, event: AstrMessageEvent, url: str, content_type: str):
         """根据 content_type 爬取数据并生成卡片图片"""
