@@ -155,6 +155,28 @@ def draw_vote_chart(draw, x, y, votes, font_sm):
 
     draw.text((x, bar_y + bar_height + 5), f"支持: {red_count} / 反对: {black_count} ", fill=(220, 220, 220), font=font_sm)
 
+def _get_description_lines_and_height(desc, font_sm, line_height_sm, max_width, margin):
+    """根据描述文本计算换行后的行列表及矩形高度"""
+    if not desc:
+        return [], 0
+    # 按段落分割（保留原文本中的换行符）
+    paragraphs = desc.split('\n')
+    all_lines = []
+    # 临时绘图对象用于文本测量
+    dummy_draw = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+    for para in paragraphs:
+        if not para.strip():
+            continue
+        para_lines = wrap_text(para, font_sm, max_width, dummy_draw)
+        if para_lines:
+            all_lines.extend(para_lines)
+            all_lines.append('')  # 段落之间加一个空行
+    # 移除最后一个多余的空行
+    if all_lines and all_lines[-1] == '':
+        all_lines.pop()
+    height = len(all_lines) * line_height_sm + margin * 2
+    return all_lines, height
+
 def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, font_path: str = None) -> str:
     cfg = DEFAULT_CONFIG.copy()
     if config:
@@ -198,11 +220,6 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         (100, 180, 255), (255, 165, 0), (162, 155, 254),
         (255, 107, 107), (129, 236, 236), (255, 234, 167),
     ]
-
-    # 简介区域圆角矩形样式
-    desc_bg_color = (0, 0, 0, 100)   # 半透明黑色背景
-    desc_padding = 15
-    desc_radius = 12
 
     # ========== 第一步：计算每张卡片所需高度 ==========
     card_heights = []
@@ -248,6 +265,7 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         authors = mod.get('authors', [])
         if authors:
             author_str = ', '.join(authors)
+            dummy_draw = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
             author_lines = wrap_text(author_str, font_sm, card_width - 60, dummy_draw)
             y += len(author_lines) * line_height_sm + 20
         else:
@@ -261,15 +279,16 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         else:
             y += 10
 
-        # 简介区域高度（单独计算）
+        # 简介区域高度（使用辅助函数计算）
         desc = mod.get('description', '')
         if desc:
-            desc_lines = wrap_text(desc, font_sm, card_width - desc_padding * 2, dummy_draw)
-            desc_height = len(desc_lines) * line_height_sm + desc_padding * 2
+            desc_rect_width = card_width - 60
+            desc_margin = 15
+            text_max_width = desc_rect_width - desc_margin * 2
+            _, desc_height = _get_description_lines_and_height(desc, font_sm, line_height_sm, text_max_width, desc_margin)
+            y += desc_height + 30
         else:
-            desc_height = 0
-
-        y += desc_height + 30   # 加上间距
+            y += 30  # 间距
 
         card_heights.append(y)
 
@@ -433,37 +452,32 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         else:
             current_y += 10
 
-                # 简介区域高度（使用与实际绘制相同的段落换行逻辑）
+        # 简介区域绘制
         desc = mod.get('description', '')
         if desc:
-            # 矩形背景宽度（左右各留30px）
             desc_rect_width = card_width - 60
-            # 文本左右内边距（相对于矩形背景）
             desc_margin = 15
-            # 文本实际可用宽度
-            text_max_width = desc_rect_width - 2 * desc_margin
+            text_max_width = desc_rect_width - desc_margin * 2
+            desc_lines, desc_height = _get_description_lines_and_height(desc, font_sm, line_height_sm, text_max_width, desc_margin)
 
-            # 按段落分割（保留原文本中的换行符）
-            paragraphs = desc.split('\n')
-            all_lines = []
-            for para in paragraphs:
-                if not para.strip():
-                    continue
-                # 对每个段落进行自动换行
-                para_lines = wrap_text(para, font_sm, text_max_width, dummy_draw)
-                if para_lines:
-                    all_lines.extend(para_lines)
-                    all_lines.append('')  # 段落之间加一个空行
-            # 移除最后一个多余的空行
-            if all_lines and all_lines[-1] == '':
-                all_lines.pop()
+            # 绘制半透明黑色背景圆角矩形
+            rect_x = card_x + 30
+            rect_y = current_y
+            rect_w = card_width - 60
+            rect_h = desc_height
+            draw.rounded_rectangle((rect_x, rect_y, rect_x + rect_w, rect_y + rect_h),
+                                   radius=12, fill=(0, 0, 0, 100))
 
-            # 计算矩形高度：行数 * 行高 + 上下边距
-            desc_height = len(all_lines) * line_height_sm + desc_margin * 2
+            # 绘制文本（逐行）
+            text_x = rect_x + desc_margin
+            text_y = rect_y + desc_margin
+            for line in desc_lines:
+                draw.text((text_x, text_y), line, fill=text_colors['description'], font=font_sm)
+                text_y += line_height_sm
+
+            current_y += desc_height + 30
         else:
-            desc_height = 0
-
-        y += desc_height + 30   # 加上间距
+            current_y += 30
 
     final = Image.alpha_composite(background.convert('RGBA'), canvas)
     buf = io.BytesIO()
