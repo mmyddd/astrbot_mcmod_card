@@ -3,7 +3,7 @@ display_name: MC百科卡片
 desc: MC百科卡片解析 (支持模组+整合包)
 version: v2.0.0  # 改为 2.0.0
 author: QiChenSn
-repo: https://github.com/QiChenSn/astrbot_mcmod_card
+repo: https://github.com/mmyddd/astrbot_mcmod_card
 support_platforms:
   - aiocqhttp
   - qq_official
