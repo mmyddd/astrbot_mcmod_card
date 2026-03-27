@@ -84,6 +84,7 @@ def create_radar_chart(data, labels, scores, color, size, font_path=None):
     return Image.open(buf).convert("RGBA")
 
 def wrap_text(text, font, max_width, draw):
+    """字符级换行，确保每行不超过max_width"""
     if not text:
         return []
     lines = []
@@ -432,7 +433,7 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         else:
             current_y += 10
 
-                # 简介区域（圆角矩形，放在卡片底部）
+        # 简介区域高度（使用与绘制阶段相同的段落换行逻辑）
         desc = mod.get('description', '')
         if desc:
             # 矩形背景宽度（左右各留30px）
@@ -442,37 +443,25 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
             # 文本实际可用宽度
             text_max_width = desc_rect_width - 2 * desc_margin
 
-            # 按段落分割（保留原文本中的换行符）
+            # 按段落分割
             paragraphs = desc.split('\n')
             all_lines = []
             for para in paragraphs:
                 if not para.strip():
                     continue
-                # 对每个段落进行自动换行
-                para_lines = wrap_text(para, font_sm, text_max_width, draw)
+                para_lines = wrap_text(para, font_sm, text_max_width, dummy_draw)
                 if para_lines:
                     all_lines.extend(para_lines)
-                    all_lines.append('')  # 段落之间加一个空行
-            # 移除最后一个多余的空行
+                    all_lines.append('')  # 段落间空行
             if all_lines and all_lines[-1] == '':
                 all_lines.pop()
 
-            if all_lines:
-                # 计算矩形高度：行数 * 行高 + 上下边距
-                desc_height_total = len(all_lines) * line_height_sm + desc_margin * 2
-                desc_rect = (left_x, current_y, left_x + desc_rect_width, current_y + desc_height_total)
+            # 计算矩形高度
+            desc_height = len(all_lines) * line_height_sm + desc_margin * 2
+        else:
+            desc_height = 0
 
-                # 绘制半透明圆角矩形背景
-                draw.rounded_rectangle(desc_rect, radius=12, fill=desc_bg_color)
-
-                # 绘制文本（从矩形左上角 + desc_margin 开始）
-                text_y = current_y + desc_margin
-                for line in all_lines:
-                    draw.text((left_x + desc_margin, text_y), line, fill=text_colors['description'], font=font_sm)
-                    text_y += line_height_sm
-
-                # 更新当前Y坐标，为后续元素留出间距
-                current_y += desc_height_total + 20
+        y += desc_height + 30   # 加上间距
 
     final = Image.alpha_composite(background.convert('RGBA'), canvas)
     buf = io.BytesIO()
