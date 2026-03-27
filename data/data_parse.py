@@ -222,10 +222,12 @@ class ModpackInfoParser(BaseParser):
         res.update(self.get_authors())
         res.update(self.get_img_url())
         res.update(self.get_description())
+        # 添加热度与评分解析（原有方法已定义）
+        res.update(self.get_heat_index())
+        res.update(self.get_rating_score())
         # 整合包没有雷达图评分，设置默认值
         res.update({'modpack_count': '', 'votes': {'red_count': '0', 'red_percentage': '0%', 'black_count': '0', 'black_percentage': '0%'}})
-        # 热度字段可能不存在
-        res.update({'heat_index': '', 'rating_score': '', 'rating_level': ''})
+        # 注意：不再覆盖 heat_index 和 rating_score
         logger.debug(f"解析结果: {res}")
         return res
 
@@ -298,7 +300,6 @@ class ModpackInfoParser(BaseParser):
         return res
 
     def get_description(self):
-        # 对于模组页面，仍使用原有逻辑（类中已处理，但这个方法只在整合包中调用，所以没问题）
         # 查找整合包介绍所在的标签页
         intro_li = self.soup.select_one('li.text-area[data-id="1"]')
         if intro_li:
@@ -311,8 +312,6 @@ class ModpackInfoParser(BaseParser):
             return {'description': desc_div.get_text(strip=True)}
         return {'description': ''}
     
-    
-    # 添加 get_heat_index 方法
     def get_heat_index(self):
         heat_div = self.soup.select_one('div.block-right .text')
         if heat_div:
@@ -322,7 +321,6 @@ class ModpackInfoParser(BaseParser):
                 return {'heat_index': match.group(1)}
         return {'heat_index': ''}
 
-    # 添加 get_rating_score 方法
     def get_rating_score(self):
         score_div = self.soup.select_one('div.class-excount .star .block-left')
         if score_div:
