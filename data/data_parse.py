@@ -176,12 +176,18 @@ class ModInfoParser(BaseParser):
         return res
 
     def get_description(self):
-        # 修复：模组简介位于 li.text-area.common-text 或 div.text-area.common-text
-        desc_div = self.soup.select_one('li.text-area.common-text, div.text-area.common-text')
+    """获取模组简介，限定在 class-text 区域内"""
+    container = self.soup.select_one('div.class-text')
+    if container:
+        # 优先匹配 li.text-area.common-text（实际简介位置）
+        desc_div = container.select_one('li.text-area.common-text, div.text-area.common-text')
         if desc_div:
             text = desc_div.get_text(separator=' ', strip=True)
-            return {'description': text}
-        return {'description': ''}
+            if text:
+                logger.debug(f"解析到简介长度: {len(text)}")
+                return {'description': text}
+    logger.warning("未找到简介容器")
+    return {'description': ''}
 
     def get_heat_index(self):
         heat_div = self.soup.select_one('div.block-right .text')
