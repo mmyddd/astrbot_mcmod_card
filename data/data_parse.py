@@ -10,12 +10,6 @@ class BaseParser:
     async def gather_info(self):
         raise NotImplementedError
 
-    def get_title(self):
-        return {}
-
-    def get_img_url(self):
-        return {}
-
 
 class ModInfoParser(BaseParser):
     """模组信息解析器（适用于 /class/ 页面）"""
@@ -30,7 +24,9 @@ class ModInfoParser(BaseParser):
         res.update(self.get_authors())
         res.update(self.get_rating())
         res.update(self.get_img_url())
-        res.update(self.get_description())   # 新增简介
+        res.update(self.get_description())
+        res.update(self.get_heat_index())
+        res.update(self.get_rating_score())
         return res
 
     def get_title(self):
@@ -39,12 +35,10 @@ class ModInfoParser(BaseParser):
         if not title_div:
             return res
 
-        # 状态
         status_elements = title_div.select('div.class-official-group div')
         status = ' '.join(el.get_text(strip=True) for el in status_elements if el.get_text(strip=True))
         res['status'] = status
 
-        # 名称
         short_name = title_div.select_one('span.short-name')
         if short_name:
             res['name']['short-name'] = short_name.get_text(strip=True)
@@ -108,17 +102,14 @@ class ModInfoParser(BaseParser):
         if not mcver_container:
             return res
 
-        # 遍历所有直接的 ul 子元素（每个 ul 对应一个加载器）
         for ul in mcver_container.find_all('ul', recursive=False):
             loader = None
             versions = []
             for li in ul.find_all('li', recursive=False):
                 text = li.get_text(strip=True)
-                # 判断是否为加载器名称（以冒号结尾且不是版本号格式）
                 if text.endswith(':') and not re.match(r'^\d+\.\d+(\.\d+)?$', text[:-1]):
                     loader = text[:-1].strip()
                 else:
-                    # 查找版本链接
                     a_tag = li.find('a')
                     if a_tag and 'mcver=' in a_tag.get('href', ''):
                         v = a_tag.get_text(strip=True)
@@ -141,7 +132,6 @@ class ModInfoParser(BaseParser):
         res = {'authors': []}
         author_container = self.soup.select_one('li.col-lg-12.author')
         if author_container:
-            # 每个作者条目包含在 li 中，内部有 span.member span.name a
             names = [a.get_text(strip=True) for a in author_container.select('li span.member span.name a')]
             res['authors'] = names
         return res
@@ -182,13 +172,31 @@ class ModInfoParser(BaseParser):
         return res
 
     def get_description(self):
-        """提取模组介绍（位于 .text-area.common-text 内）"""
         desc_div = self.soup.select_one('div.text-area.common-text')
         if desc_div:
-            # 获取纯文本，并去除多余的换行
-            text = desc_div.get_text(strip=True)
+            text = desc_div.get_text(separator=' ', strip=True)
             return {'description': text}
         return {'description': ''}
+
+    def get_heat_index(self):
+        heat_div = self.soup.select_one('div.block-right .text')
+        if heat_div:
+            text = heat_div.get_text(strip=True)
+            match = re.search(r'昨日指数:\s*(\d+)', text)
+            if match:
+                return {'heat_index': match.group(1)}
+        return {'heat_index': ''}
+
+    def get_rating_score(self):
+        score_div = self.soup.select_one('div.class-excount .star .block-left')
+        if score_div:
+            score = score_div.select_one('p.up')
+            level = score_div.select_one('p.down')
+            return {
+                'rating_score': score.get_text(strip=True) if score else '',
+                'rating_level': level.get_text(strip=True) if level else ''
+            }
+        return {'rating_score': '', 'rating_level': ''}
 
 
 class ModpackInfoParser(BaseParser):
@@ -202,9 +210,11 @@ class ModpackInfoParser(BaseParser):
         res.update(self.get_mc_versions())
         res.update(self.get_authors())
         res.update(self.get_img_url())
-        res.update(self.get_description())   # 整合包简介
-        # 整合包没有雷达图，设置默认投票数据避免绘图出错
+        res.update(self.get_description())
+        # 整合包没有雷达图评分，设置默认值
         res.update({'modpack_count': '', 'votes': {'red_count': '0', 'red_percentage': '0%', 'black_count': '0', 'black_percentage': '0%'}})
+        # 热度字段可能不存在
+        res.update({'heat_index': '', 'rating_score': '', 'rating_level': ''})
         return res
 
     def get_title(self):
@@ -231,11 +241,9 @@ class ModpackInfoParser(BaseParser):
         return res
 
     def get_votes(self):
-        # 整合包可能也有红黑票，复用模组的方法
         return ModInfoParser.get_votes(self)
 
     def get_view_count(self):
-        # 与模组相同逻辑
         res = {'view_count': ''}
         for el in self.soup.select('div.span'):
             if el.select_one('p.t') and '总浏览' in el.select_one('p.t').get_text(strip=True):
@@ -278,7 +286,6 @@ class ModpackInfoParser(BaseParser):
         return res
 
     def get_description(self):
-        """提取整合包简介（通常位于 .modpack-description 或 .summary）"""
         desc_div = self.soup.select_one('div.modpack-description') or self.soup.select_one('div.summary')
         if desc_div:
             return {'description': desc_div.get_text(strip=True)}

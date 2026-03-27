@@ -16,9 +16,7 @@ DEFAULT_CONFIG = {
     "color_scheme": "default",
 }
 
-
 def create_gradient_background(width, height):
-    """创建渐变背景"""
     array = np.zeros((height, width, 3), dtype=np.uint8)
     colors = [
         np.array([255, 107, 107]),
@@ -37,9 +35,7 @@ def create_gradient_background(width, height):
         array += np.uint8(np.expand_dims(weights[i], axis=-1) * colors[i])
     return Image.fromarray(array)
 
-
 def fetch_image(url):
-    """下载图片，失败返回占位图"""
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         if '@' in url:
@@ -52,9 +48,7 @@ def fetch_image(url):
         placeholder = Image.new('RGBA', (80, 80), (200, 200, 200, 255))
         return placeholder
 
-
 def create_radar_chart(data, labels, scores, color, size, font_path=None):
-    """创建雷达图，data 已归一化到 0~1，scores 为原始分数列表"""
     data_closed = np.concatenate((data, [data[0]]))
     num_vars = len(labels)
     angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
@@ -67,7 +61,6 @@ def create_radar_chart(data, labels, scores, color, size, font_path=None):
     ax.plot(angles, data_closed, color=color, linewidth=2, zorder=3)
     ax.fill(angles, data_closed, color=color, alpha=0.3, zorder=2)
 
-    # 设置中文字体
     font_prop = None
     if font_path and Path(font_path).exists():
         try:
@@ -77,7 +70,6 @@ def create_radar_chart(data, labels, scores, color, size, font_path=None):
 
     ax.set_yticklabels([])
     ax.set_xticks(angles[:-1])
-    # 在标签上添加分数
     label_with_score = [f"{label}\n{score}" for label, score in zip(labels, scores)]
     ax.set_xticklabels(label_with_score, color='white', fontproperties=font_prop, y=-0.1)
     ax.spines['polar'].set_visible(False)
@@ -91,9 +83,7 @@ def create_radar_chart(data, labels, scores, color, size, font_path=None):
     plt.close(fig)
     return Image.open(buf).convert("RGBA")
 
-
 def wrap_text(text, font, max_width, draw):
-    """将文本按指定宽度换行，返回行列表"""
     if not text:
         return []
     words = text.split()
@@ -113,7 +103,6 @@ def wrap_text(text, font, max_width, draw):
         lines.append(' '.join(current_line))
     return lines
 
-
 def summarize_versions(versions):
     if not versions:
         return "N/A"
@@ -121,9 +110,7 @@ def summarize_versions(versions):
         return versions[0]
     return f"{versions[0]}...{versions[-1]}"
 
-
 def draw_vote_chart(draw, x, y, votes, font_sm):
-    """绘制投票条形图"""
     try:
         red_count = int(votes.get('red_count', '0'))
         black_count = int(votes.get('black_count', '0'))
@@ -168,9 +155,7 @@ def draw_vote_chart(draw, x, y, votes, font_sm):
 
     draw.text((x, bar_y + bar_height + 5), f"支持: {red_count} / 反对: {black_count} ", fill=(220, 220, 220), font=font_sm)
 
-
 def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, font_path: str = None) -> str:
-    """生成卡片图片，返回 base64 字符串"""
     cfg = DEFAULT_CONFIG.copy()
     if config:
         cfg.update(config)
@@ -180,11 +165,6 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
     gap = 40
     num_cards = len(data_list)
 
-    # 由于卡片高度动态，我们先构建每个卡片的内容，计算所需高度，再统一生成图片
-    # 为简化，这里只处理单卡片（实际可能多卡片，但通常一次只有一个链接）
-    # 我们先生成所有卡片的数据，再统一布局
-
-    # 第一步：加载字体（固定）
     try:
         if font_path and Path(font_path).exists():
             font_sm = ImageFont.truetype(font_path, 14)
@@ -199,7 +179,6 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         logger.error(f"字体加载异常: {e}，使用默认字体")
         font_sm = font_md = font_lg_bold = font_tag = ImageFont.load_default()
 
-    # 颜色定义
     text_colors = {
         'name': (51, 0, 0),
         'status': (0, 255, 255),
@@ -215,49 +194,35 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         (255, 107, 107), (129, 236, 236), (255, 234, 167),
     ]
 
-    # 收集每个卡片的高度信息（先计算，后绘图）
+    # 计算每个卡片的高度
     card_heights = []
-    card_content_positions = []  # 存储每个卡片内容的起始y坐标和各个模块的位置
-
-    # 我们采用两阶段：先在一个临时画布上测量高度，但PIL不支持直接测量。改用模拟计算。
-    # 简单方法：先计算每个卡片的总高度，再统一生成背景和绘制。
-    # 由于我们支持单卡片，我们可以直接动态生成背景高度。
-
-    # 计算单个卡片的内容高度
-    def calculate_card_height(mod):
-        # 固定起始高度（图标区域、标题、状态）
+    for mod in data_list:
+        # 模拟计算高度（与绘制逻辑一致）
         y = 0
-        # 图标和标题区域大致高度
         y += 110  # 图标+标题
         y += 30   # 状态
         y += 40   # 浏览量
-        y += 75   # 投票图表（固定）
+        y += 75   # 投票图表
         y += 15   # 间距
 
-        # MC版本
         mc_versions = mod.get('mc_versions', {})
         if mc_versions:
-            y += 28  # "支持版本:"标题
+            y += 28
             for _ in mc_versions:
                 y += 25
             y += 20
         else:
             y += 20
 
-        # 简介
         desc = mod.get('description', '')
         if desc:
-            # 估算简介高度：按宽度350，每行20px
-            # 使用wrap_text模拟计算
-            desc_lines = wrap_text(desc, font_sm, 350, ImageDraw.Draw(Image.new('RGBA', (1, 1))))
+            desc_lines = wrap_text(desc, font_sm, card_width - 60, ImageDraw.Draw(Image.new('RGBA', (1, 1))))
             y += 20 + len(desc_lines) * 20
         else:
             y += 10
 
-        # 标签
         tags = mod.get('tags', [])
         if tags:
-            # 估算标签区域高度
             tag_y = 0
             tag_x = 0
             tag_h = 24
@@ -274,49 +239,36 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         else:
             y += 25
 
-        # 作者
         authors = mod.get('authors', [])
         if authors:
             author_str = ', '.join(authors)
-            # 估算作者行数
-            author_lines = wrap_text(author_str, font_sm, 350, ImageDraw.Draw(Image.new('RGBA', (1, 1))))
+            author_lines = wrap_text(author_str, font_sm, card_width - 60, ImageDraw.Draw(Image.new('RGBA', (1, 1))))
             y += len(author_lines) * 20 + 20
         else:
             y += 20
 
-        # 雷达图（如果有评分）
         rating_keys = ['fun', 'difficulty', 'stability', 'practicality', 'aesthetics', 'balance', 'compatibility', 'durability']
         values = [mod.get(k, 0) for k in rating_keys]
         if any(v > 0 for v in values):
-            y += 250  # 雷达图区域固定高度
+            y += 250
         else:
             y += 10
-
-        # 底部留白
-        y += 40
-        return y
-
-    # 计算所有卡片高度
-    for mod in data_list:
-        h = calculate_card_height(mod)
-        card_heights.append(h)
+        y += 40  # 底部留白
+        card_heights.append(y)
 
     total_card_height = max(card_heights) if card_heights else 700
     img_width = padding * 2 + card_width * num_cards + gap * (num_cards - 1)
     img_height = padding * 2 + total_card_height
 
-    # 创建背景和画布
     background = create_gradient_background(img_width, img_height)
     canvas = Image.new('RGBA', (img_width, img_height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(canvas)
 
-    # 绘制每个卡片
     for i, mod in enumerate(data_list):
         card_x = padding + i * (card_width + gap)
         card_y = padding
         card_box = (card_x, card_y, card_x + card_width, card_y + total_card_height)
 
-        # 毛玻璃效果
         region = background.crop(card_box)
         blurred = region.filter(ImageFilter.GaussianBlur(radius=15))
         glass = Image.new('RGBA', (card_width, total_card_height), (255, 255, 255, 40))
@@ -324,7 +276,6 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         canvas.paste(frosted, card_box)
         draw.rounded_rectangle(card_box, radius=20, outline=(255, 255, 255, 200), width=3)
 
-        # 开始绘制内容（坐标基于卡片内部）
         # 图标
         icon_url = mod.get('img-url', '')
         if icon_url:
@@ -364,7 +315,13 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         else:
             y_pos += 10
 
-        # 从图标左下方开始布局
+        # 热度（评分+等级）
+        rating_score = mod.get('rating_score', '')
+        rating_level = mod.get('rating_level', '')
+        if rating_score and rating_level:
+            draw.text((text_x, y_pos), f"热度: {rating_score} ({rating_level})", fill=text_colors['view_count'], font=font_sm)
+            y_pos += font_sm.size + 5
+
         left_x = card_x + 30
         current_y = max(y_pos, card_y + 30 + 80 + 10)
 
@@ -451,7 +408,6 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
             if max_val == 0:
                 max_val = 1
             normalized = np.array(values) / max_val
-            # 根据名称决定雷达图颜色
             if 'Touhou' in str(name_data):
                 color = (0, 1.0, 1.0, 1)
             else:
