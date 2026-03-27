@@ -5,23 +5,20 @@ import html
 class BaseParser:
     """解析器基类，定义通用方法"""
     def __init__(self, html_content: str):
-        self.soup = BeautifulSoup(html_content, 'lxml')  # 使用 lxml 加速
+        self.soup = BeautifulSoup(html_content, 'lxml')
 
     async def gather_info(self):
-        """子类实现具体解析，返回统一数据字典"""
         raise NotImplementedError
 
     def get_title(self):
-        """通用标题解析，子类可覆盖"""
         return {}
 
     def get_img_url(self):
-        """通用图片解析，子类可覆盖"""
         return {}
 
 
 class ModInfoParser(BaseParser):
-    """模组信息解析器"""
+    """模组信息解析器（适用于 /class/ 页面）"""
     async def gather_info(self):
         res = {}
         res.update(self.get_title())
@@ -33,7 +30,7 @@ class ModInfoParser(BaseParser):
         res.update(self.get_authors())
         res.update(self.get_rating())
         res.update(self.get_img_url())
-        res.update(self.get_description())
+        res.update(self.get_description())   # 新增简介
         return res
 
     def get_title(self):
@@ -41,20 +38,25 @@ class ModInfoParser(BaseParser):
         title_div = self.soup.select_one('div.class-title')
         if not title_div:
             return res
+
         # 状态
         status_elements = title_div.select('div.class-official-group div')
-        statue = ' '.join(el.get_text(strip=True) for el in status_elements if el.get_text(strip=True))
-        res['status'] = statue
+        status = ' '.join(el.get_text(strip=True) for el in status_elements if el.get_text(strip=True))
+        res['status'] = status
+
         # 名称
         short_name = title_div.select_one('span.short-name')
         if short_name:
             res['name']['short-name'] = short_name.get_text(strip=True)
+
         chinese_name = title_div.select_one('h3')
         if chinese_name:
             res['name']['chinese-name'] = chinese_name.get_text(strip=True)
+
         english_name = title_div.select_one('h4')
         if english_name:
             res['name']['english-name'] = english_name.get_text(strip=True)
+
         return res
 
     def get_tag(self):
@@ -66,7 +68,14 @@ class ModInfoParser(BaseParser):
         return res
 
     def get_votes(self):
-        res = {'votes': {'red_count': '', 'red_percentage': '', 'black_count': '', 'black_percentage': ''}}
+        res = {
+            'votes': {
+                'red_count': '',
+                'red_percentage': '',
+                'black_count': '',
+                'black_percentage': ''
+            }
+        }
         vote_container = self.soup.select_one('div.text-block')
         if vote_container:
             for span in vote_container.select('span'):
@@ -96,22 +105,27 @@ class ModInfoParser(BaseParser):
     def get_mc_versions(self):
         res = {'mc_versions': {}}
         mcver_container = self.soup.select_one('li.col-lg-12.mcver')
-        if mcver_container:
-            for ul in mcver_container.select('ul'):
-                loader = None
-                versions = []
-                for li in ul.select('li'):
-                    text = li.get_text(strip=True)
-                    if text.endswith(':'):
-                        potential = text[:-1]
-                        if not re.match(r'^\d+\.\d+(\.\d+)?$', potential):
-                            loader = potential
-                    elif li.select_one('a') and 'mcver=' in li.select_one('a').get('href', ''):
-                        v = li.select_one('a').get_text(strip=True)
+        if not mcver_container:
+            return res
+
+        # 遍历所有直接的 ul 子元素（每个 ul 对应一个加载器）
+        for ul in mcver_container.find_all('ul', recursive=False):
+            loader = None
+            versions = []
+            for li in ul.find_all('li', recursive=False):
+                text = li.get_text(strip=True)
+                # 判断是否为加载器名称（以冒号结尾且不是版本号格式）
+                if text.endswith(':') and not re.match(r'^\d+\.\d+(\.\d+)?$', text[:-1]):
+                    loader = text[:-1].strip()
+                else:
+                    # 查找版本链接
+                    a_tag = li.find('a')
+                    if a_tag and 'mcver=' in a_tag.get('href', ''):
+                        v = a_tag.get_text(strip=True)
                         if v:
                             versions.append(v)
-                if loader and versions:
-                    res['mc_versions'][loader] = versions
+            if loader and versions:
+                res['mc_versions'][loader] = versions
         return res
 
     def get_modpack_count(self):
@@ -127,6 +141,7 @@ class ModInfoParser(BaseParser):
         res = {'authors': []}
         author_container = self.soup.select_one('li.col-lg-12.author')
         if author_container:
+            # 每个作者条目包含在 li 中，内部有 span.member span.name a
             names = [a.get_text(strip=True) for a in author_container.select('li span.member span.name a')]
             res['authors'] = names
         return res
@@ -165,46 +180,43 @@ class ModInfoParser(BaseParser):
                 url = 'https:' + url
             res['img-url'] = url
         return res
-    
+
     def get_description(self):
-        """解析模组简介"""
-        desc_div = self.soup.select_one('div.class-description')
+        """提取模组介绍（位于 .text-area.common-text 内）"""
+        desc_div = self.soup.select_one('div.text-area.common-text')
         if desc_div:
-            # 去除 HTML 标签，保留纯文本
-            return {'description': desc_div.get_text(strip=True)}
+            # 获取纯文本，并去除多余的换行
+            text = desc_div.get_text(strip=True)
+            return {'description': text}
         return {'description': ''}
 
 
 class ModpackInfoParser(BaseParser):
-    """整合包信息解析器"""
+    """整合包信息解析器（适用于 /modpack/ 页面）"""
     async def gather_info(self):
         res = {}
         res.update(self.get_title())
         res.update(self.get_tag())
-        res.update(self.get_votes())          # 整合包可能也有投票
+        res.update(self.get_votes())
         res.update(self.get_view_count())
         res.update(self.get_mc_versions())
         res.update(self.get_authors())
         res.update(self.get_img_url())
-        res.update(self.get_description())
-        # 整合包没有雷达图评分，但可设置默认值或留空，绘图时会忽略
+        res.update(self.get_description())   # 整合包简介
+        # 整合包没有雷达图，设置默认投票数据避免绘图出错
         res.update({'modpack_count': '', 'votes': {'red_count': '0', 'red_percentage': '0%', 'black_count': '0', 'black_percentage': '0%'}})
         return res
 
     def get_title(self):
         res = {'status': '', 'name': {}}
-        # 整合包页面标题结构可能不同，需根据实际调整
         title_div = self.soup.select_one('div.modpack-title') or self.soup.select_one('div.class-title')
         if title_div:
-            # 名称
             name_elem = title_div.select_one('h1') or title_div.select_one('h3')
             if name_elem:
                 res['name']['chinese-name'] = name_elem.get_text(strip=True)
-            # 可能有英文名或短名
             short = title_div.select_one('span.short-name')
             if short:
                 res['name']['short-name'] = short.get_text(strip=True)
-            # 状态
             status = title_div.select_one('div.modpack-status')
             if status:
                 res['status'] = status.get_text(strip=True)
@@ -219,10 +231,11 @@ class ModpackInfoParser(BaseParser):
         return res
 
     def get_votes(self):
-        # 整合包可能也有红黑票，结构类似
+        # 整合包可能也有红黑票，复用模组的方法
         return ModInfoParser.get_votes(self)
 
     def get_view_count(self):
+        # 与模组相同逻辑
         res = {'view_count': ''}
         for el in self.soup.select('div.span'):
             if el.select_one('p.t') and '总浏览' in el.select_one('p.t').get_text(strip=True):
@@ -233,12 +246,9 @@ class ModpackInfoParser(BaseParser):
         return res
 
     def get_mc_versions(self):
-        # 整合包支持的 MC 版本
         res = {'mc_versions': {}}
-        # 寻找包含版本信息的区域
         version_area = self.soup.select_one('li.col-lg-12.mcver') or self.soup.select_one('div.modpack-versions')
         if version_area:
-            # 简单起见，将所有版本放入 "Minecraft" 键下
             versions = []
             for a in version_area.select('a'):
                 text = a.get_text(strip=True)
@@ -266,8 +276,9 @@ class ModpackInfoParser(BaseParser):
                 url = 'https:' + url
             res['img-url'] = url
         return res
-    
+
     def get_description(self):
+        """提取整合包简介（通常位于 .modpack-description 或 .summary）"""
         desc_div = self.soup.select_one('div.modpack-description') or self.soup.select_one('div.summary')
         if desc_div:
             return {'description': desc_div.get_text(strip=True)}
