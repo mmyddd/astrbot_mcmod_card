@@ -221,6 +221,9 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         (255, 107, 107), (129, 236, 236), (255, 234, 167),
     ]
 
+    # 底部边距（统一增加，使简介区域与卡片底边框有足够间距）
+    BOTTOM_PADDING = 20
+
     # ========== 第一步：计算每张卡片所需高度 ==========
     card_heights = []
     for mod in data_list:
@@ -289,6 +292,9 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
             y += desc_height + 30
         else:
             y += 30  # 间距
+
+        # 统一底部边距
+        y += BOTTOM_PADDING
 
         card_heights.append(y)
 
@@ -478,6 +484,9 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
             current_y += desc_height + 30
         else:
             current_y += 30
+
+        # 统一底部边距
+        current_y += BOTTOM_PADDING
 
     final = Image.alpha_composite(background.convert('RGBA'), canvas)
     buf = io.BytesIO()
