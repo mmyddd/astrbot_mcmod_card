@@ -14,7 +14,6 @@ from astrbot.api import logger
 DEFAULT_CONFIG = {
     "card_width": 450,
     "color_scheme": "default",
-    # 注意：移除了 card_height
 }
 
 def create_gradient_background(width, height):
@@ -180,10 +179,10 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         logger.error(f"字体加载异常: {e}，使用默认字体")
         font_sm = font_md = font_lg_bold = font_tag = ImageFont.load_default()
 
-    # 定义动态行高（基于字体大小）
-    line_height_sm = font_sm.size + 4      # 小字号行高
-    line_height_md = font_md.size + 5      # 中字号行高
-    line_height_lg = font_lg_bold.size + 5 # 大字号行高
+    # 动态行高（基于字体大小）
+    line_height_sm = font_sm.size + 4
+    line_height_md = font_md.size + 5
+    line_height_lg = font_lg_bold.size + 5
 
     text_colors = {
         'name': (51, 0, 0),
@@ -200,11 +199,16 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         (255, 107, 107), (129, 236, 236), (255, 234, 167),
     ]
 
+    # 简介区域圆角矩形样式
+    desc_bg_color = (0, 0, 0, 100)   # 半透明黑色背景
+    desc_padding = 15
+    desc_radius = 12
+
     # ========== 第一步：计算每张卡片所需高度 ==========
     card_heights = []
     for mod in data_list:
         y = 0
-        # 图标 + 标题区域（固定高度）
+        # 图标 + 标题区域
         y += 110
         y += 30          # 状态行
         y += 40          # 浏览量行
@@ -220,16 +224,6 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         else:
             y += 20
 
-        # 简介
-        desc = mod.get('description', '')
-        if desc:
-            # 使用临时画布计算换行
-            dummy_draw = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
-            desc_lines = wrap_text(desc, font_sm, card_width - 60, dummy_draw)
-            y += 20 + len(desc_lines) * line_height_sm
-        else:
-            y += 10
-
         # 标签
         tags = mod.get('tags', [])
         if tags:
@@ -238,8 +232,9 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
             tag_h = 24
             pad = 10
             right_bound = card_width - 20
+            dummy_draw = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
             for tag in tags:
-                bbox = dummy_draw.textbbox((0, 0), tag, font=font_tag) if 'dummy_draw' in locals() else ImageDraw.Draw(Image.new('RGBA', (1, 1))).textbbox((0, 0), tag, font=font_tag)
+                bbox = dummy_draw.textbbox((0, 0), tag, font=font_tag)
                 tw = bbox[2] - bbox[0] + 16
                 if tag_x + tw > right_bound and tag_x != 0:
                     tag_x = 0
@@ -258,18 +253,26 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         else:
             y += 20
 
-        # 雷达图
+        # 雷达图（模组才有）
         rating_keys = ['fun', 'difficulty', 'stability', 'practicality', 'aesthetics', 'balance', 'compatibility', 'durability']
         values = [mod.get(k, 0) for k in rating_keys]
         if any(v > 0 for v in values):
             y += 250
         else:
             y += 10
-        y += 40          # 底部留白
+
+        # 简介区域高度（单独计算）
+        desc = mod.get('description', '')
+        if desc:
+            desc_lines = wrap_text(desc, font_sm, card_width - desc_padding * 2, dummy_draw)
+            desc_height = len(desc_lines) * line_height_sm + desc_padding * 2
+        else:
+            desc_height = 0
+
+        y += desc_height + 30   # 加上间距
 
         card_heights.append(y)
 
-    # 取最大高度，并增加安全余量
     total_card_height = max(card_heights) + 20
     img_width = padding * 2 + card_width * num_cards + gap * (num_cards - 1)
     img_height = padding * 2 + total_card_height
@@ -337,7 +340,7 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
             draw.text((text_x, y_pos), f"热度: {rating_score} ({rating_level})", fill=text_colors['view_count'], font=font_sm)
             y_pos += font_sm.size + 5
 
-        # 昨日指数
+        # 昨日指数（整合包专用）
         heat = mod.get('heat_index', '')
         if heat:
             draw.text((text_x, y_pos), f"昨日指数: {heat}", fill=text_colors['view_count'], font=font_sm)
@@ -372,17 +375,6 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
             current_y += 20
         else:
             current_y += 20
-
-        # 简介
-        desc = mod.get('description', '')
-        if desc:
-            draw.text((left_x, current_y), "简介:", fill=text_colors['label'], font=font_md)
-            current_y += 20
-            desc_lines = wrap_text(desc, font_sm, card_width - 60, draw)
-            for line in desc_lines:
-                draw.text((left_x, current_y), line, fill=text_colors['description'], font=font_sm)
-                current_y += line_height_sm
-            current_y += 5
 
         # 标签
         tags = mod.get('tags', [])
@@ -420,7 +412,7 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
                 current_y += line_height_sm
             current_y += 5
 
-        # 雷达图
+        # 雷达图（模组）
         rating_keys = ['fun', 'difficulty', 'stability', 'practicality', 'aesthetics', 'balance', 'compatibility', 'durability']
         labels_cn = ['趣味', '难度', '稳定', '实用', '美观', '平衡', '兼容', '耐玩']
         values = [mod.get(k, 0) for k in rating_keys]
@@ -437,6 +429,26 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
             radar_x = card_x + (card_width - radar.width) // 2
             radar_y = current_y
             canvas.paste(radar, (radar_x, radar_y), radar)
+            current_y += radar.height + 20
+        else:
+            current_y += 10
+
+        # 简介区域（圆角矩形，放在卡片底部）
+        desc = mod.get('description', '')
+        if desc:
+            desc_lines = wrap_text(desc, font_sm, card_width - desc_padding * 2, draw)
+            if desc_lines:
+                # 计算简介矩形位置和尺寸
+                desc_top = current_y
+                desc_height_total = len(desc_lines) * line_height_sm + desc_padding * 2
+                desc_rect = (left_x, desc_top, left_x + card_width - 60, desc_top + desc_height_total)
+                # 绘制半透明圆角矩形
+                draw.rounded_rectangle(desc_rect, radius=desc_radius, fill=desc_bg_color)
+                # 绘制简介文本
+                text_y = desc_top + desc_padding
+                for line in desc_lines:
+                    draw.text((left_x + desc_padding, text_y), line, fill=text_colors['description'], font=font_sm)
+                    text_y += line_height_sm
 
     final = Image.alpha_composite(background.convert('RGBA'), canvas)
     buf = io.BytesIO()
