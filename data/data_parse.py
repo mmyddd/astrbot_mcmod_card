@@ -2,6 +2,9 @@ from bs4 import BeautifulSoup
 import re
 import html
 
+from astrbot.api import logger
+
+
 class BaseParser:
     """解析器基类，定义通用方法"""
     def __init__(self, html_content: str):
