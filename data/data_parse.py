@@ -176,7 +176,7 @@ class ModInfoParser(BaseParser):
         return res
 
     def get_description(self):
-        """获取模组简介，递归提取全部文本，保留段落结构"""
+        """获取模组简介，递归提取全部文本，保留段落结构，移除 script/style 等干扰内容"""
         container = self.soup.select_one('div.class-text')
         if not container:
             return {'description': ''}
@@ -184,8 +184,14 @@ class ModInfoParser(BaseParser):
         desc_div = container.select_one('li.text-area.common-text, div.text-area.common-text')
         if not desc_div:
             return {'description': ''}
-    
-        # 递归提取文本，块级元素前后加换行
+
+        # 深拷贝简介节点，避免污染原soup（因为要移除 script/style）
+        from bs4 import BeautifulSoup
+        div_clone = BeautifulSoup(str(desc_div), 'lxml').find()
+        # 移除所有 script 和 style 标签
+        for tag in div_clone.find_all(['script', 'style']):
+            tag.decompose()
+
         def extract_text(element):
             texts = []
             if isinstance(element, str):
@@ -193,22 +199,21 @@ class ModInfoParser(BaseParser):
                 if text:
                     texts.append(text)
             elif element.name in ['p', 'div', 'ul', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'br']:
-                # 块级元素，递归处理子元素
+                # 块级元素，递归处理子元素，结束后加换行
                 for child in element.children:
                     texts.extend(extract_text(child))
-                # 块级元素结束后添加一个换行符（用于分隔）
                 if texts and not texts[-1].endswith('\n'):
                     texts.append('\n')
             else:
-                # 内联元素，直接拼接
+                # 其他元素，递归处理子元素
                 for child in element.children:
                     texts.extend(extract_text(child))
             return texts
     
-        raw_texts = extract_text(desc_div)
+        raw_texts = extract_text(div_clone)
         full_text = ''.join(raw_texts)
-        # 将多个连续换行合并为单个换行，并去除首尾空白
         full_text = re.sub(r'\n+', '\n', full_text).strip()
+        full_text = re.sub(r'<[^>]+>', '', full_text)   # 移除任何残留标签
         logger.debug(f"解析到简介，总长度: {len(full_text)}")
         return {'description': full_text}
 
