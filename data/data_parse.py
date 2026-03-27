@@ -176,17 +176,35 @@ class ModInfoParser(BaseParser):
         return res
 
     def get_description(self):
-        """获取模组简介，限定在 class-text 区域内"""
+        """获取模组简介，保留段落结构（与整合包一致）"""
         container = self.soup.select_one('div.class-text')
-        if container:
-            # 优先匹配 li.text-area.common-text（实际简介位置）
-            desc_div = container.select_one('li.text-area.common-text, div.text-area.common-text')
-            if desc_div:
-                text = desc_div.get_text(separator=' ', strip=True)
-                if text:
-                    logger.debug(f"解析到简介长度: {len(text)}")
-                    return {'description': text}
-        logger.warning("未找到简介容器")
+        if not container:
+            return {'description': ''}
+
+        # 优先匹配 li.text-area.common-text 或 div.text-area.common-text（实际简介位置）
+        desc_div = container.select_one('li.text-area.common-text, div.text-area.common-text')
+        if not desc_div:
+            return {'description': ''}
+
+        # 收集所有直接子 <p> 标签的文本，用 \n 分隔段落
+        paragraphs = []
+        for p in desc_div.find_all('p', recursive=False):
+            text = p.get_text(strip=True)
+            if text:
+                paragraphs.append(text)
+
+        if paragraphs:
+            description = '\n'.join(paragraphs)
+            logger.debug(f"解析到简介，共 {len(paragraphs)} 个段落，总长度: {len(description)}")
+            return {'description': description}
+    
+        # 如果没有 <p> 标签，回退到获取整个容器的纯文本（保留空格）
+        text = desc_div.get_text(separator=' ', strip=True)
+        if text:
+            logger.debug(f"回退获取纯文本简介，长度: {len(text)}")
+            return {'description': text}
+
+        logger.warning("未找到简介内容")
         return {'description': ''}
 
     def get_heat_index(self):
