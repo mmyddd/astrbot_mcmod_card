@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import io
-import math
 import requests
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
@@ -8,14 +7,11 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
 import base64
-import re
 
 from astrbot.api import logger
 
-# 默认配置
+# 默认配置（只保留尺寸等）
 DEFAULT_CONFIG = {
-    "font_path": None,
-    "font_bold_path": None,
     "card_width": 450,
     "card_height": 700,
     "color_scheme": "default",
@@ -154,8 +150,14 @@ def draw_vote_chart(draw, x, y, votes, font_sm):
 
     draw.text((x, bar_y + bar_height + 5), f"支持: {red_count} / 反对: {black_count} ", fill=(220, 220, 220), font=font_sm)
 
-def generate_mod_cards(data_list, config=None):
-    """生成卡片图片，返回 base64 字符串"""
+def generate_mod_cards(data_list, config=None, font_path=None):
+    """生成卡片图片，返回 base64 字符串
+    
+    Args:
+        data_list: 模组数据列表
+        config: 配置字典（可选）
+        font_path: 字体文件路径（固定），若为 None 则使用默认字体
+    """
     cfg = DEFAULT_CONFIG.copy()
     if config:
         cfg.update(config)
@@ -172,24 +174,19 @@ def generate_mod_cards(data_list, config=None):
     canvas = Image.new('RGBA', (img_width, img_height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(canvas)
 
-    # 加载字体（增强版）
-    font_path = cfg.get("font_path")
-    font_bold_path = cfg.get("font_bold_path", font_path)
+    # 加载字体（使用传入的固定路径）
     try:
         if font_path and Path(font_path).exists():
             font_sm = ImageFont.truetype(font_path, 16)
             font_md = ImageFont.truetype(font_path, 20)
-            if font_bold_path and Path(font_bold_path).exists():
-                font_lg_bold = ImageFont.truetype(font_bold_path, 28)
-            else:
-                font_lg_bold = ImageFont.truetype(font_path, 28)
+            font_lg_bold = ImageFont.truetype(font_path, 28)
             font_tag = ImageFont.truetype(font_path, 16)
             logger.debug(f"字体加载成功: {font_path}")
         else:
             if font_path:
-                logger.warning(f"配置的字体路径不存在或为空: {font_path}")
+                logger.warning(f"固定字体路径不存在: {font_path}，使用默认字体")
             else:
-                logger.warning("未配置字体路径，使用默认字体")
+                logger.warning("未提供字体路径，使用默认字体")
             font_sm = font_md = font_lg_bold = font_tag = ImageFont.load_default()
     except Exception as e:
         logger.error(f"字体加载失败: {e}，使用默认字体")
