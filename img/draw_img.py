@@ -14,6 +14,7 @@ from astrbot.api import logger
 DEFAULT_CONFIG = {
     "card_width": 450,
     "color_scheme": "default",
+    # 注意：移除了 card_height
 }
 
 def create_gradient_background(width, height):
@@ -179,6 +180,11 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         logger.error(f"字体加载异常: {e}，使用默认字体")
         font_sm = font_md = font_lg_bold = font_tag = ImageFont.load_default()
 
+    # 定义动态行高（基于字体大小）
+    line_height_sm = font_sm.size + 4      # 小字号行高
+    line_height_md = font_md.size + 5      # 中字号行高
+    line_height_lg = font_lg_bold.size + 5 # 大字号行高
+
     text_colors = {
         'name': (51, 0, 0),
         'status': (0, 255, 255),
@@ -194,33 +200,37 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         (255, 107, 107), (129, 236, 236), (255, 234, 167),
     ]
 
-    # 计算每个卡片的高度
+    # ========== 第一步：计算每张卡片所需高度 ==========
     card_heights = []
     for mod in data_list:
-        # 模拟计算高度（与绘制逻辑一致）
         y = 0
-        y += 110  # 图标+标题
-        y += 30   # 状态
-        y += 40   # 浏览量
-        y += 75   # 投票图表
-        y += 15   # 间距
+        # 图标 + 标题区域（固定高度）
+        y += 110
+        y += 30          # 状态行
+        y += 40          # 浏览量行
+        y += 75          # 投票图表
+        y += 15          # 间距
 
+        # MC 版本
         mc_versions = mod.get('mc_versions', {})
         if mc_versions:
             y += 28
-            for _ in mc_versions:
-                y += 25
+            y += len(mc_versions) * 25
             y += 20
         else:
             y += 20
 
+        # 简介
         desc = mod.get('description', '')
         if desc:
-            desc_lines = wrap_text(desc, font_sm, card_width - 60, ImageDraw.Draw(Image.new('RGBA', (1, 1))))
-            y += 20 + len(desc_lines) * 20
+            # 使用临时画布计算换行
+            dummy_draw = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+            desc_lines = wrap_text(desc, font_sm, card_width - 60, dummy_draw)
+            y += 20 + len(desc_lines) * line_height_sm
         else:
             y += 10
 
+        # 标签
         tags = mod.get('tags', [])
         if tags:
             tag_y = 0
@@ -229,7 +239,7 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
             pad = 10
             right_bound = card_width - 20
             for tag in tags:
-                bbox = ImageDraw.Draw(Image.new('RGBA', (1, 1))).textbbox((0, 0), tag, font=font_tag)
+                bbox = dummy_draw.textbbox((0, 0), tag, font=font_tag) if 'dummy_draw' in locals() else ImageDraw.Draw(Image.new('RGBA', (1, 1))).textbbox((0, 0), tag, font=font_tag)
                 tw = bbox[2] - bbox[0] + 16
                 if tag_x + tw > right_bound and tag_x != 0:
                     tag_x = 0
@@ -239,24 +249,28 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         else:
             y += 25
 
+        # 作者
         authors = mod.get('authors', [])
         if authors:
             author_str = ', '.join(authors)
-            author_lines = wrap_text(author_str, font_sm, card_width - 60, ImageDraw.Draw(Image.new('RGBA', (1, 1))))
-            y += len(author_lines) * 20 + 20
+            author_lines = wrap_text(author_str, font_sm, card_width - 60, dummy_draw)
+            y += len(author_lines) * line_height_sm + 20
         else:
             y += 20
 
+        # 雷达图
         rating_keys = ['fun', 'difficulty', 'stability', 'practicality', 'aesthetics', 'balance', 'compatibility', 'durability']
         values = [mod.get(k, 0) for k in rating_keys]
         if any(v > 0 for v in values):
             y += 250
         else:
             y += 10
-        y += 40  # 底部留白
+        y += 40          # 底部留白
+
         card_heights.append(y)
 
-    total_card_height = max(card_heights) if card_heights else 700
+    # 取最大高度，并增加安全余量
+    total_card_height = max(card_heights) + 20
     img_width = padding * 2 + card_width * num_cards + gap * (num_cards - 1)
     img_height = padding * 2 + total_card_height
 
@@ -264,6 +278,7 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
     canvas = Image.new('RGBA', (img_width, img_height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(canvas)
 
+    # ========== 第二步：实际绘制卡片 ==========
     for i, mod in enumerate(data_list):
         card_x = padding + i * (card_width + gap)
         card_y = padding
@@ -366,7 +381,7 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
             desc_lines = wrap_text(desc, font_sm, card_width - 60, draw)
             for line in desc_lines:
                 draw.text((left_x, current_y), line, fill=text_colors['description'], font=font_sm)
-                current_y += 20
+                current_y += line_height_sm
             current_y += 5
 
         # 标签
@@ -402,7 +417,7 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
             author_lines = wrap_text(author_str, font_sm, card_width - 60, draw)
             for line in author_lines:
                 draw.text((left_x, current_y), line, fill=text_colors['authors'], font=font_sm)
-                current_y += 20
+                current_y += line_height_sm
             current_y += 5
 
         # 雷达图

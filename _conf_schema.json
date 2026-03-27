@@ -11,12 +11,6 @@
     "default": 450,
     "hint": "单张卡片的宽度。"
   },
-  "card_height": {
-    "description": "卡片高度（像素）",
-    "type": "int",
-    "default": 700,
-    "hint": "单张卡片的高度。"
-  },
   "color_scheme": {
     "description": "颜色主题",
     "type": "string",
