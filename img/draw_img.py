@@ -322,6 +322,12 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
             draw.text((text_x, y_pos), f"热度: {rating_score} ({rating_level})", fill=text_colors['view_count'], font=font_sm)
             y_pos += font_sm.size + 5
 
+        # 昨日指数
+        heat = mod.get('heat_index', '')
+        if heat:
+            draw.text((text_x, y_pos), f"昨日指数: {heat}", fill=text_colors['view_count'], font=font_sm)
+            y_pos += font_sm.size + 5
+
         left_x = card_x + 30
         current_y = max(y_pos, card_y + 30 + 80 + 10)
 

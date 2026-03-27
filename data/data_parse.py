@@ -176,7 +176,8 @@ class ModInfoParser(BaseParser):
         return res
 
     def get_description(self):
-        desc_div = self.soup.select_one('div.text-area.common-text')
+        # 修复：模组简介位于 li.text-area.common-text 或 div.text-area.common-text
+        desc_div = self.soup.select_one('li.text-area.common-text, div.text-area.common-text')
         if desc_div:
             text = desc_div.get_text(separator=' ', strip=True)
             return {'description': text}
