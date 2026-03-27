@@ -176,36 +176,42 @@ class ModInfoParser(BaseParser):
         return res
 
     def get_description(self):
-        """获取模组简介，保留段落结构（与整合包一致）"""
+        """获取模组简介，递归提取全部文本，保留段落结构"""
         container = self.soup.select_one('div.class-text')
         if not container:
             return {'description': ''}
 
-        # 优先匹配 li.text-area.common-text 或 div.text-area.common-text（实际简介位置）
         desc_div = container.select_one('li.text-area.common-text, div.text-area.common-text')
         if not desc_div:
             return {'description': ''}
-
-        # 收集所有直接子 <p> 标签的文本，用 \n 分隔段落
-        paragraphs = []
-        for p in desc_div.find_all('p', recursive=False):
-            text = p.get_text(strip=True)
-            if text:
-                paragraphs.append(text)
-
-        if paragraphs:
-            description = '\n'.join(paragraphs)
-            logger.debug(f"解析到简介，共 {len(paragraphs)} 个段落，总长度: {len(description)}")
-            return {'description': description}
     
-        # 如果没有 <p> 标签，回退到获取整个容器的纯文本（保留空格）
-        text = desc_div.get_text(separator=' ', strip=True)
-        if text:
-            logger.debug(f"回退获取纯文本简介，长度: {len(text)}")
-            return {'description': text}
-
-        logger.warning("未找到简介内容")
-        return {'description': ''}
+        # 递归提取文本，块级元素前后加换行
+        def extract_text(element):
+            texts = []
+            if isinstance(element, str):
+                text = element.strip()
+                if text:
+                    texts.append(text)
+            elif element.name in ['p', 'div', 'ul', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'br']:
+                # 块级元素，递归处理子元素
+                for child in element.children:
+                    texts.extend(extract_text(child))
+                # 块级元素结束后添加一个换行符（用于分隔）
+                if texts and not texts[-1].endswith('\n'):
+                    texts.append('\n')
+            else:
+                # 内联元素，直接拼接
+                for child in element.children:
+                    texts.extend(extract_text(child))
+            return texts
+    
+    raw_texts = extract_text(desc_div)
+    full_text = ''.join(raw_texts)
+    # 将多个连续换行合并为单个换行，并去除首尾空白
+    import re
+    full_text = re.sub(r'\n+', '\n', full_text).strip()
+    logger.debug(f"解析到简介，总长度: {len(full_text)}")
+    return {'description': full_text}
 
     def get_heat_index(self):
         heat_div = self.soup.select_one('div.block-right .text')
