@@ -25,11 +25,10 @@ class McmodCardPlugin(Star):
         self._init_font_paths()
 
     def _init_data_dir(self):
-        """初始化插件数据目录"""
-        base = get_astrbot_data_path() / "plugin_data" / self.plugin_name
+        base = Path(get_astrbot_data_path()) / "plugin_data" / self.plugin_name
         self.data_dir = base
         self.data_dir.mkdir(parents=True, exist_ok=True)
-
+    
     def _init_font_paths(self):
         """处理字体路径，若配置为空则自动查找"""
         if not self.config.get("font_path"):
