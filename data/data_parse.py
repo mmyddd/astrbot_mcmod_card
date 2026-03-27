@@ -225,8 +225,6 @@ class ModpackInfoParser(BaseParser):
         # 添加热度与评分解析（原有方法已定义）
         res.update(self.get_heat_index())
         res.update(self.get_rating_score())
-        # 整合包没有雷达图评分，设置默认值
-        res.update({'modpack_count': '', 'votes': {'red_count': '0', 'red_percentage': '0%', 'black_count': '0', 'black_percentage': '0%'}})
         # 注意：不再覆盖 heat_index 和 rating_score
         logger.debug(f"解析结果: {res}")
         return res
