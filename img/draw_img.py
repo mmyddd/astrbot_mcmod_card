@@ -86,22 +86,43 @@ def create_radar_chart(data, labels, scores, color, size, font_path=None):
 def wrap_text(text, font, max_width, draw):
     if not text:
         return []
-    words = text.split()
-    lines = []
-    current_line = []
-    for word in words:
-        test_line = ' '.join(current_line + [word])
-        bbox = draw.textbbox((0, 0), test_line, font=font)
-        width = bbox[2] - bbox[0]
-        if width <= max_width:
-            current_line.append(word)
-        else:
-            if current_line:
-                lines.append(' '.join(current_line))
-            current_line = [word]
-    if current_line:
-        lines.append(' '.join(current_line))
-    return lines
+    
+    # 判断是否需要按字符分割（没有空格且包含中文）
+    if ' ' not in text and any('\u4e00' <= ch <= '\u9fff' for ch in text):
+        # 按字符分割
+        lines = []
+        current_line = ''
+        for ch in text:
+            test_line = current_line + ch
+            bbox = draw.textbbox((0, 0), test_line, font=font)
+            width = bbox[2] - bbox[0]
+            if width <= max_width:
+                current_line = test_line
+            else:
+                if current_line:
+                    lines.append(current_line)
+                current_line = ch
+        if current_line:
+            lines.append(current_line)
+        return lines
+    else:
+        # 原有按单词分割逻辑（适用于英文或包含空格文本）
+        words = text.split()
+        lines = []
+        current_line = []
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            bbox = draw.textbbox((0, 0), test_line, font=font)
+            width = bbox[2] - bbox[0]
+            if width <= max_width:
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                current_line = [word]
+        if current_line:
+            lines.append(' '.join(current_line))
+        return lines
 
 def summarize_versions(versions):
     if not versions:
