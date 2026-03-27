@@ -298,16 +298,25 @@ class ModpackInfoParser(BaseParser):
         return res
 
     def get_description(self):
-        # 查找整合包介绍所在的标签页
+        # 查找整合包介绍所在的标签页（模组页面类似，但整合包通常用这个）
         intro_li = self.soup.select_one('li.text-area[data-id="1"]')
         if intro_li:
-            text = intro_li.get_text(separator=' ', strip=True)
-            if text:
-                return {'description': text}
+            # 收集所有直接子 <p> 标签的文本（保留段落）
+            paragraphs = []
+            for p in intro_li.find_all('p', recursive=False):  # 只取直接子级
+                text = p.get_text(strip=True)
+                if text:
+                    paragraphs.append(text)
+            if paragraphs:
+                return {'description': '\n'.join(paragraphs)}
         # 回退：如果有 modpack-description 或 summary
         desc_div = self.soup.select_one('div.modpack-description') or self.soup.select_one('div.summary')
         if desc_div:
-            return {'description': desc_div.get_text(strip=True)}
+            paragraphs = [p.get_text(strip=True) for p in desc_div.find_all('p') if p.get_text(strip=True)]
+            if paragraphs:
+                return {'description': '\n'.join(paragraphs)}
+            else:
+                return {'description': desc_div.get_text(strip=True)}
         return {'description': ''}
     
     def get_heat_index(self):

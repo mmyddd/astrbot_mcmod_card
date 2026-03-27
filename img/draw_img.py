@@ -86,43 +86,21 @@ def create_radar_chart(data, labels, scores, color, size, font_path=None):
 def wrap_text(text, font, max_width, draw):
     if not text:
         return []
-    
-    # 判断是否需要按字符分割（没有空格且包含中文）
-    if ' ' not in text and any('\u4e00' <= ch <= '\u9fff' for ch in text):
-        # 按字符分割
-        lines = []
-        current_line = ''
-        for ch in text:
-            test_line = current_line + ch
-            bbox = draw.textbbox((0, 0), test_line, font=font)
-            width = bbox[2] - bbox[0]
-            if width <= max_width:
-                current_line = test_line
-            else:
-                if current_line:
-                    lines.append(current_line)
-                current_line = ch
-        if current_line:
-            lines.append(current_line)
-        return lines
-    else:
-        # 原有按单词分割逻辑
-        words = text.split()
-        lines = []
-        current_line = []
-        for word in words:
-            test_line = ' '.join(current_line + [word])
-            bbox = draw.textbbox((0, 0), test_line, font=font)
-            width = bbox[2] - bbox[0]
-            if width <= max_width:
-                current_line.append(word)
-            else:
-                if current_line:
-                    lines.append(' '.join(current_line))
-                current_line = [word]
-        if current_line:
-            lines.append(' '.join(current_line))
-        return lines
+    lines = []
+    current_line = ''
+    for ch in text:
+        test_line = current_line + ch
+        bbox = draw.textbbox((0, 0), test_line, font=font)
+        width = bbox[2] - bbox[0]
+        if width <= max_width:
+            current_line = test_line
+        else:
+            if current_line:
+                lines.append(current_line)
+            current_line = ch
+    if current_line:
+        lines.append(current_line)
+    return lines
 
 def summarize_versions(versions):
     if not versions:
@@ -454,7 +432,7 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         else:
             current_y += 10
 
-        # 简介区域（圆角矩形，放在卡片底部）
+                # 简介区域（圆角矩形，放在卡片底部）
         desc = mod.get('description', '')
         if desc:
             # 矩形背景宽度（左右各留30px）
@@ -464,11 +442,24 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
             # 文本实际可用宽度
             text_max_width = desc_rect_width - 2 * desc_margin
 
-            # 根据实际宽度换行
-            desc_lines = wrap_text(desc, font_sm, text_max_width, draw)
-            if desc_lines:
-                # 计算矩形高度
-                desc_height_total = len(desc_lines) * line_height_sm + desc_margin * 2
+            # 按段落分割（保留原文本中的换行符）
+            paragraphs = desc.split('\n')
+            all_lines = []
+            for para in paragraphs:
+                if not para.strip():
+                    continue
+                # 对每个段落进行自动换行
+                para_lines = wrap_text(para, font_sm, text_max_width, draw)
+                if para_lines:
+                    all_lines.extend(para_lines)
+                    all_lines.append('')  # 段落之间加一个空行
+            # 移除最后一个多余的空行
+            if all_lines and all_lines[-1] == '':
+                all_lines.pop()
+
+            if all_lines:
+                # 计算矩形高度：行数 * 行高 + 上下边距
+                desc_height_total = len(all_lines) * line_height_sm + desc_margin * 2
                 desc_rect = (left_x, current_y, left_x + desc_rect_width, current_y + desc_height_total)
 
                 # 绘制半透明圆角矩形背景
@@ -476,7 +467,7 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
 
                 # 绘制文本（从矩形左上角 + desc_margin 开始）
                 text_y = current_y + desc_margin
-                for line in desc_lines:
+                for line in all_lines:
                     draw.text((left_x + desc_margin, text_y), line, fill=text_colors['description'], font=font_sm)
                     text_y += line_height_sm
 
