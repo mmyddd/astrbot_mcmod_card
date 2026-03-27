@@ -457,19 +457,31 @@ def generate_mod_cards(data_list: List[Dict[str, Any]], config: Dict = None, fon
         # 简介区域（圆角矩形，放在卡片底部）
         desc = mod.get('description', '')
         if desc:
-            desc_lines = wrap_text(desc, font_sm, card_width - desc_padding * 2, draw)
+            # 矩形背景宽度（左右各留30px）
+            desc_rect_width = card_width - 60
+            # 文本左右内边距（相对于矩形背景）
+            desc_margin = 15
+            # 文本实际可用宽度
+            text_max_width = desc_rect_width - 2 * desc_margin
+
+            # 根据实际宽度换行
+            desc_lines = wrap_text(desc, font_sm, text_max_width, draw)
             if desc_lines:
-                # 计算简介矩形位置和尺寸
-                desc_top = current_y
-                desc_height_total = len(desc_lines) * line_height_sm + desc_padding * 2
-                desc_rect = (left_x, desc_top, left_x + card_width - 60, desc_top + desc_height_total)
-                # 绘制半透明圆角矩形
-                draw.rounded_rectangle(desc_rect, radius=desc_radius, fill=desc_bg_color)
-                # 绘制简介文本
-                text_y = desc_top + desc_padding
+                # 计算矩形高度
+                desc_height_total = len(desc_lines) * line_height_sm + desc_margin * 2
+                desc_rect = (left_x, current_y, left_x + desc_rect_width, current_y + desc_height_total)
+
+                # 绘制半透明圆角矩形背景
+                draw.rounded_rectangle(desc_rect, radius=12, fill=desc_bg_color)
+
+                # 绘制文本（从矩形左上角 + desc_margin 开始）
+                text_y = current_y + desc_margin
                 for line in desc_lines:
-                    draw.text((left_x + desc_padding, text_y), line, fill=text_colors['description'], font=font_sm)
+                    draw.text((left_x + desc_margin, text_y), line, fill=text_colors['description'], font=font_sm)
                     text_y += line_height_sm
+
+                # 更新当前Y坐标，为后续元素留出间距
+                current_y += desc_height_total + 20
 
     final = Image.alpha_composite(background.convert('RGBA'), canvas)
     buf = io.BytesIO()
