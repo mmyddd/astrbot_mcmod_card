@@ -298,24 +298,15 @@ class ModpackInfoParser(BaseParser):
         return res
 
     def get_description(self):
-        container = self.soup.select_one('div.class-text')
-        if not container:
-            return {'description': ''}
-
-        # 查找第一个 <fieldset>（模组列表所在区域）
-        fieldset = container.find('fieldset')
-        if fieldset:
-            # 收集 fieldset 之前的所有元素
-            elements = []
-            for child in container.children:
-                if child == fieldset:
-                    break
-                elements.append(child)
-            # 从收集的元素中提取纯文本
-            from bs4 import BeautifulSoup
-            temp = BeautifulSoup(''.join(str(e) for e in elements), 'lxml')
-            text = temp.get_text(separator=' ', strip=True)
-        else:
-            # 没有 fieldset 时，直接取整个容器的文本（模组页面）
-            text = container.get_text(separator=' ', strip=True)
-        return {'description': text}
+        # 对于模组页面，仍使用原有逻辑（类中已处理，但这个方法只在整合包中调用，所以没问题）
+        # 查找整合包介绍所在的标签页
+        intro_li = self.soup.select_one('li.text-area[data-id="1"]')
+        if intro_li:
+            text = intro_li.get_text(separator=' ', strip=True)
+            if text:
+                return {'description': text}
+        # 回退：如果有 modpack-description 或 summary
+        desc_div = self.soup.select_one('div.modpack-description') or self.soup.select_one('div.summary')
+        if desc_div:
+            return {'description': desc_div.get_text(strip=True)}
+        return {'description': ''}
