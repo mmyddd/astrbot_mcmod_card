@@ -1,0 +1,39 @@
+{
+  "font_path": {
+    "description": "中文字体文件路径（推荐使用完整路径）",
+    "type": "string",
+    "default": "",
+    "hint": "留空则自动在 resource 目录查找 msyh.ttf、simhei.ttf、simsun.ttc。"
+  },
+  "font_bold_path": {
+    "description": "加粗字体文件路径（可选，若不填则使用普通字体）",
+    "type": "string",
+    "default": "",
+    "hint": "如果留空，将使用普通字体代替。"
+  },
+  "cache_ttl": {
+    "description": "数据缓存有效期（秒）",
+    "type": "int",
+    "default": 86400,
+    "hint": "缓存网页数据的时间，避免频繁请求。设为0则禁用缓存。"
+  },
+  "card_width": {
+    "description": "卡片宽度（像素）",
+    "type": "int",
+    "default": 450,
+    "hint": "单张卡片的宽度。"
+  },
+  "card_height": {
+    "description": "卡片高度（像素）",
+    "type": "int",
+    "default": 700,
+    "hint": "单张卡片的高度。"
+  },
+  "color_scheme": {
+    "description": "颜色主题",
+    "type": "string",
+    "default": "default",
+    "options": ["default"],
+    "hint": "目前仅支持 default。"
+  }
+}
