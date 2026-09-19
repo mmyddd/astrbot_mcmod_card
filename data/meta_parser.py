@@ -5,9 +5,9 @@ from __future__ import annotations
 
 import html
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List
 
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
 
 from astrbot.api import logger
 

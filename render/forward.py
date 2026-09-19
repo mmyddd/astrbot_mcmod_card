@@ -24,7 +24,6 @@ from .tree import (
     HARD_NODE_LIMIT,
     BodyPart,
     ForwardNodeData,
-    flatten_to_blocks,
     plan_records,
     sanitize_nodes,
 )

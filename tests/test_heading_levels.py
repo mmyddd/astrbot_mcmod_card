@@ -6,7 +6,6 @@ from __future__ import annotations
 from bs4 import BeautifulSoup
 
 from mcmod_plugin.data.body_parser import BodyParser
-from mcmod_plugin.data.meta_parser import MetaParser
 from mcmod_plugin.render.tree import ForwardTreeBuilder
 
 URL_897 = "https://www.mcmod.cn/modpack/897.html"
@@ -14,7 +13,6 @@ URL_897 = "https://www.mcmod.cn/modpack/897.html"
 
 def build(html: str, url: str, content_type: str):
     soup = BeautifulSoup(html, "lxml")
-    meta = MetaParser(soup, url=url, content_type=content_type).parse()
     sections = BodyParser(soup).parse()
     builder = ForwardTreeBuilder({"include_images": False})
     return sections, builder.build_body_parts(sections)

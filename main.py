@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+import astrbot.api.message_components as Comp
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
@@ -295,13 +296,14 @@ class McmodCardPlugin(Star):
     async def terminate(self) -> None:
         logger.info(f"插件 {self.plugin_name} 已卸载")
 
-def _wrap_plain(components: Sequence[Any]) -> List[List[Any]]:
-    """把一串组件按长度上限切成多条普通消息。"""
-    messages: List[List[Any]] = []
+
+def _wrap_plain(components: Sequence[Any]) -> List[List[Comp.Plain]]:
+    """把一串组件按长度上限切成多条普通消息（无内容时返回空列表）。"""
+    messages: List[List[Comp.Plain]] = []
     for component in components:
         text = getattr(component, "text", "")
         if not text:
             continue
         for chunk in _split_text(text):
             messages.append([Comp.Plain(chunk)])
-    return messages or [[]]
+    return messages

@@ -13,7 +13,7 @@ mcmod 正文结构（class 与 modpack 页面同构）::
 from __future__ import annotations
 
 import re
-from typing import List, Optional, Sequence
+from typing import List, Optional
 
 from bs4 import BeautifulSoup, NavigableString, Tag
 
@@ -136,14 +136,12 @@ class BodyParser:
 
         sections: List[Section] = []
         current = Section(title="", level=1)
-        saw_title = False
 
         for block in self._parse_children(container):
             if block.kind == "title":
                 if current.blocks or current.title:
                     sections.append(current)
                 current = Section(title=block.text, level=block.level or 1)
-                saw_title = True
                 continue
             current.blocks.append(block)
 

@@ -20,7 +20,6 @@ from mcmod_plugin.render.tree import (
     ForwardNodeData,
     ForwardTreeBuilder,
     plan_records,
-    sanitize_nodes,
 )
 
 URL_2524 = "https://www.mcmod.cn/class/2524.html"
