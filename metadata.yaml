@@ -1,8 +1,8 @@
 name: mcmod_card
 display_name: MC百科卡片
 desc: MC百科链接解析为合并转发（概览 + 正文按标题分段 + 逐图）
-version: v3.1.0
-author: QiChenSn
+version: v0.9.0
+author: mmyddd
 repo: https://github.com/mmyddd/astrbot_mcmod_card
 support_platforms:
   - aiocqhttp

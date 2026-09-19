@@ -42,10 +42,10 @@ IMAGE_CONCURRENCY = 4
 FAIL_MESSAGE = "检测到 MC 百科链接，但生成卡片失败，请查看日志"
 
 #: 构建标记：日志里会打印，便于确认当前运行的到底是哪一版代码
-BUILD_TAG = "mcmod-card 3.1.0 (single-record)"
+BUILD_TAG = "mcmod-card 0.9.0 (single-record)"
 
 
-@register("mcmod_card", "QiChen", "MC百科卡片解析（合并转发·单条记录）", "3.1.0")
+@register("mcmod_card", "mmyddd", "MC百科卡片解析（合并转发·单条记录）", "0.9.0")
 class McmodCardPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)

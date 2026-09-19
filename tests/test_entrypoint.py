@@ -11,7 +11,6 @@ import astrbot.api.message_components as Comp
 import mcmod_plugin.main as plugin_main
 from mcmod_plugin.data.body_parser import BodyParser
 from mcmod_plugin.data.meta_parser import MetaParser
-from mcmod_plugin.render.tree import ForwardTreeBuilder
 
 URL_CLASS = "https://www.mcmod.cn/class/2524.html"
 URL_PACK = "https://www.mcmod.cn/modpack/897.html"
