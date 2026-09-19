@@ -3,19 +3,94 @@
     "description": "数据缓存有效期（秒）",
     "type": "int",
     "default": 86400,
-    "hint": "缓存网页数据的时间，避免频繁请求。设为0则禁用缓存。"
+    "hint": "缓存网页解析结果的时间，避免频繁请求 MC 百科。设为 0 则禁用缓存。"
   },
-  "card_width": {
-    "description": "卡片宽度（像素）",
-    "type": "int",
-    "default": 450,
-    "hint": "单张卡片的宽度。"
+  "forward_overview": {
+    "description": "概览（ID/数据/标签）以合并转发发送",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后「1.ID+封面、2.热度/活跃度/浏览量+雷达图、3.标签」合并为一条转发聊天记录；关闭则逐条普通消息发送。"
   },
-  "color_scheme": {
-    "description": "颜色主题",
+  "forward_body": {
+    "description": "正文以合并转发发送",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后 MC 百科正文按标题拆成转发节点，标题下的每个段落/列表项/图片再各成一个子转发节点。"
+  },
+  "node_name": {
+    "description": "转发节点显示昵称",
     "type": "string",
-    "default": "default",
-    "options": ["default"],
-    "hint": "目前仅支持 default。"
+    "default": "MC百科",
+    "hint": "合并转发记录中每个节点的发送者昵称，仅用于展示。"
+  },
+  "node_uin": {
+    "description": "转发节点显示账号",
+    "type": "string",
+    "default": "10000",
+    "hint": "合并转发记录中每个节点的发送者账号（uin），仅用于展示，建议填写机器人自身的 QQ 号。"
+  },
+  "max_nodes_per_message": {
+    "description": "单条合并转发的最大节点数",
+    "type": "int",
+    "default": 40,
+    "slider": {
+      "min": 1,
+      "max": 40,
+      "step": 1
+    },
+    "hint": "正文节点过多时会按「标题」边界拆成多条转发记录依次发送，不会把一个标题的子节点拆开。QQ 上限约 40。"
+  },
+  "overview_split": {
+    "description": "概览拆成 1/2/3 三个子转发节点",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后概览内部同样按「1.ID+封面 / 2.数据+雷达图 / 3.标签作者」分层；关闭则合并成一个节点。"
+  },
+  "include_cover": {
+    "description": "在概览中发送模组封面图",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后概览只发送文字。"
+  },
+  "include_radar": {
+    "description": "在概览中发送评分雷达图",
+    "type": "bool",
+    "default": true,
+    "hint": "综合评分全为 0 时自动跳过。"
+  },
+  "include_images": {
+    "description": "发送正文中的图片",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后正文只发送文字，图片标题仍会保留。"
+  },
+  "max_images": {
+    "description": "单次最多发送的正文图片数",
+    "type": "int",
+    "default": 40,
+    "slider": {
+      "min": 0,
+      "max": 100,
+      "step": 1
+    },
+    "hint": "0 表示不发送正文图片，避免图片过多刷屏或拖慢解析。"
+  },
+  "number_prefix": {
+    "description": "降级为普通消息时添加段落编号",
+    "type": "bool",
+    "default": true,
+    "hint": "非 QQ（OneBot v11）平台无法使用合并转发，只能逐条发送，编号用于保持阅读顺序。"
+  },
+  "fallback_to_text": {
+    "description": "平台不支持合并转发时降级为普通消息",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后在不支持合并转发的平台上只发送一条概要文字。"
+  },
+  "font_path": {
+    "description": "雷达图字体路径",
+    "type": "string",
+    "default": "",
+    "hint": "留空则使用插件内置的 resource/msyh.ttf。"
   }
 }

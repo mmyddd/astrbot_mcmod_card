@@ -1,7 +1,4 @@
 aiohttp
 beautifulsoup4
-matplotlib
 lxml
-requests
 pillow
-numpy
