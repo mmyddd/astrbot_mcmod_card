@@ -22,8 +22,8 @@ from ..data.models import Meta, Section
 #: 一个节点内的内容块：("text", 文本) 或 ("image", 图片字节)
 ContentBlock = Tuple[str, Any]
 
-#: 单条合并转发记录的节点数硬上限（QQ 端限制较严）
-HARD_NODE_LIMIT = 40
+#: 单条合并转发记录的顶层节点数上限（QQ 端限制较严）
+HARD_NODE_LIMIT = 50
 
 #: 树深度硬上限（[记录] → [节点] = 2 层，留一层余量）
 HARD_DEPTH_LIMIT = 3
@@ -62,7 +62,7 @@ class ForwardNodeData:
 
 @dataclass
 class BodyPart:
-    """一个标题及其直属内容：标题写在聊天记录外，内容进合并转发。"""
+    """一个标题及其直属内容（标题与内容都放进同一条合并转发记录）。"""
 
     number: str = ""
     title: str = ""
@@ -77,6 +77,39 @@ class BodyPart:
 
     def text(self) -> str:
         return "\n".join(node.text() for node in self.nodes if node.text())
+
+
+def build_record_nodes(
+    overview: Optional[ForwardNodeData],
+    parts: Sequence[BodyPart],
+) -> List[ForwardNodeData]:
+    """把所有内容装进**同一条**合并转发记录的节点列表。
+
+    结构（层级即 QQ 的三层嵌套上限）::
+
+        [合并转发记录]
+          ├─ 概览节点（含 1.1 / 1.2 / 1.3 子节点）
+          ├─ 1. 写在开头
+          │    └─ 段落 / 列表项 / 图片
+          ├─ 1.1. 版本注意事项
+          │    └─ …
+          └─ …
+
+    标题节点互为兄弟（编号 1 / 1.1 / 1.1.1 体现层级），内容挂在其下，
+    因此深度恒为「记录 → 标题 → 内容」，既保留层级又不会超限。
+    """
+    nodes: List[ForwardNodeData] = []
+    if overview is not None:
+        if overview.blocks or not overview.children:
+            nodes.append(overview)
+        else:
+            # 概览本身只是分组壳（1.1/1.2/1.3），展开成同级节点避免空节点
+            nodes.extend(overview.children)
+    for part in parts:
+        node = ForwardNodeData(blocks=[("text", part.heading)]) if part.heading else ForwardNodeData()
+        node.children = list(part.nodes)
+        nodes.append(node)
+    return sanitize_nodes(nodes)
 
 
 def flatten_to_blocks(nodes: Sequence[ForwardNodeData]) -> List[ContentBlock]:
@@ -108,30 +141,18 @@ def plan_records(
     roots: Sequence[ForwardNodeData],
     max_nodes_per_message: int = HARD_NODE_LIMIT,
 ) -> List[List[ForwardNodeData]]:
-    """把节点切成多条「合并转发记录」，不切开任何一个根节点的子树。"""
+    """把节点切成「合并转发记录」。
+
+    默认上游只传一次，也就是**所有内容装进同一条聊天记录**，避免刷屏；
+    只有顶层节点数超过上限时才分片，且不切开任何一个节点的子树。
+    """
     limit = max(1, min(int(max_nodes_per_message or HARD_NODE_LIMIT), HARD_NODE_LIMIT))
-    records: List[List[ForwardNodeData]] = []
-    current: List[ForwardNodeData] = []
-    current_count = 0
+    items = list(roots)
+    if len(items) <= limit:
+        return [items] if items else []
 
-    for root in roots:
-        count = root.nodes_count()
-        if current and current_count + count > limit:
-            records.append(current)
-            current = []
-            current_count = 0
-        if count > limit:
-            logger.warning(f"单个节点树 {count} 个节点超过上限 {limit}，已单独成条")
-        current.append(root)
-        current_count += count
-        if current_count >= limit:
-            records.append(current)
-            current = []
-            current_count = 0
-
-    if current:
-        records.append(current)
-    return records
+    logger.info(f"顶层节点数 {len(items)} 超过单条转发上限 {limit}，将拆分为多条记录")
+    return [items[start:start + limit] for start in range(0, len(items), limit)]
 
 
 class ForwardTreeBuilder:

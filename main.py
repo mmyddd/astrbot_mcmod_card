@@ -27,6 +27,7 @@ from .render.tree import (
     BodyPart,
     ForwardNodeData,
     ForwardTreeBuilder,
+    build_record_nodes,
     sanitize_nodes,
 )
 
@@ -154,74 +155,59 @@ class McmodCardPlugin(Star):
             logger.debug(f"读取平台名称失败，按不支持合并转发处理: {exc}")
             return False
 
-    async def _send_overview(
+    async def _send(
         self,
         event: AstrMessageEvent,
         overview: Optional[ForwardNodeData],
-        supports_forward: bool,
-        forward_overview: bool,
+        parts: Sequence[BodyPart],
     ):
-        """概览：合并转发发送；不支持转发时退化为逐条普通消息。"""
-        if overview is None:
-            return
-        nodes = sanitize_nodes([overview])
+        """把概览与正文**打包进同一条合并转发记录**发送，避免刷屏。
+
+        记录内结构（深度恒为「记录 → 标题 → 内容」）::
+
+            [1.1 概览：封面 + 名称]
+            [1.2 数据 + 雷达图]
+            [1.3 标签与作者]
+            [1. 写在开头]
+              └─ 段落 / 列表项 / 图片
+            [1.1. 版本注意事项]
+              └─ …
+
+        平台不支持合并转发（或关闭了合并转发）时，退回逐条普通消息。
+        """
+        supports_forward = self._supports_forward(event)
+        config = self._tree_config()
+        nodes = build_record_nodes(overview, parts)
         if not nodes:
+            yield event.plain_result("检测到 MC 百科链接，但没有解析到可发送的内容")
             return
 
-        if forward_overview:
-            records = build_records(nodes, config=self._tree_config())
+        if supports_forward:
+            records = build_records(nodes, config=config)
             if records:
                 for record in records:
                     yield event.chain_result([record])
                 return
 
-        for components in flatten_to_plain_records(
-            nodes, number_prefix=self._bool("number_prefix", True)
-        ):
-            yield event.chain_result(components)
-
-    async def _send_body(
-        self,
-        event: AstrMessageEvent,
-        parts: Sequence[BodyPart],
-        supports_forward: bool,
-        forward_body: bool,
-    ):
-        """正文：标题写在聊天记录外，内容放进紧跟其后的合并转发记录。"""
-        config = self._tree_config()
+        # 降级：标题单独成条，内容按编号逐条发送
         number_prefix = self._bool("number_prefix", True)
-        sent_any = False
-        heading_index = 0
-
-        for part in parts:
-            nodes = sanitize_nodes(part.nodes)
-            heading_index += 1
-
-            # 标题始终作为普通消息单独发送，位于聊天记录之外
-            for components in _wrap_plain(heading_components(part)):
-                yield event.chain_result(components)
-                sent_any = True
-
-            if not nodes:
-                continue
-
-            if forward_body and supports_forward:
-                records = build_records(nodes, config=config)
-                for record in records:
-                    yield event.chain_result([record])
-                    sent_any = True
-                continue
-
+        if overview is not None:
+            overview_nodes = sanitize_nodes([overview])
             for components in flatten_to_plain_records(
-                nodes,
-                number_prefix=number_prefix,
-                prefix=(heading_index,),
+                overview_nodes, number_prefix=number_prefix
             ):
                 yield event.chain_result(components)
-                sent_any = True
 
-        if not sent_any:
-            yield event.plain_result("检测到 MC 百科链接，但没有解析到可发送的内容")
+        for index, part in enumerate(parts, start=1):
+            for components in _wrap_plain(heading_components(part)):
+                yield event.chain_result(components)
+            content = sanitize_nodes(part.nodes)
+            if not content:
+                continue
+            for components in flatten_to_plain_records(
+                content, number_prefix=number_prefix, prefix=(index,)
+            ):
+                yield event.chain_result(components)
 
 
     # ------------------------------------------------------------------ 入口
@@ -261,20 +247,7 @@ class McmodCardPlugin(Star):
             event.stop_event()
             return
 
-        async for result in self._send_overview(
-            event,
-            overview,
-            supports_forward,
-            supports_forward and self._bool("forward_overview", True),
-        ):
-            yield result
-
-        async for result in self._send_body(
-            event,
-            parts,
-            supports_forward,
-            supports_forward and self._bool("forward_body", True),
-        ):
+        async for result in self._send(event, overview, parts):
             yield result
         event.stop_event()
 

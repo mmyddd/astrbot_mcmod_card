@@ -162,15 +162,33 @@ def test_depth_limit_folds_extra_levels() -> None:
     assert "曾孙节点" in folded
 
 
-def test_plan_records_never_splits_a_node() -> None:
+def test_plan_records_keeps_everything_in_one_record() -> None:
+    """默认所有顶层节点进同一条记录，不刷屏。"""
     roots = []
     for index in range(3):
         node = ForwardNodeData(blocks=[("text", f"分区{index}")])
         for sub in range(3):
             node.children.append(ForwardNodeData(blocks=[("text", f"子{sub}")]))
         roots.append(node)
-    records = plan_records(roots, max_nodes_per_message=4)
-    assert [sum(item.nodes_count() for item in record) for record in records] == [4, 4, 4]
+    records = plan_records(roots, max_nodes_per_message=40)
+    assert len(records) == 1
+    assert records[0] == roots
+
+
+def test_plan_records_splits_only_when_over_limit() -> None:
+    """超过上限才分片，且不切开任何一个节点的子树。"""
+    roots = [
+        ForwardNodeData(
+            blocks=[("text", f"分区{index}")],
+            children=[ForwardNodeData(blocks=[("text", "子")])],
+        )
+        for index in range(5)
+    ]
+    records = plan_records(roots, max_nodes_per_message=2)
+    assert [len(record) for record in records] == [2, 2, 1]
+    for record in records:
+        for node in record:
+            assert node.children, "节点子树不应被拆开"
 
 
 def test_build_forward_records_compat(class_2524_html: str) -> None:
