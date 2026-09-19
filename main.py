@@ -41,13 +41,17 @@ IMAGE_CONCURRENCY = 4
 
 FAIL_MESSAGE = "检测到 MC 百科链接，但生成卡片失败，请查看日志"
 
+#: 构建标记：日志里会打印，便于确认当前运行的到底是哪一版代码
+BUILD_TAG = "mcmod-card 3.1.0 (single-record)"
 
-@register("mcmod_card", "QiChen", "MC百科卡片解析（合并转发·分段正文）", "3.0.0")
+
+@register("mcmod_card", "QiChen", "MC百科卡片解析（合并转发·单条记录）", "3.1.0")
 class McmodCardPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
         self.plugin_name = self.name
+        logger.info(f"插件已加载：{BUILD_TAG}")
         self._init_data_dir()
         self._init_font_path()
 
@@ -185,6 +189,10 @@ class McmodCardPlugin(Star):
         if supports_forward:
             records = build_records(nodes, config=config)
             if records:
+                top_nodes = sum(len(record.nodes) for record in records)
+                logger.info(
+                    f"合并转发发送：{len(records)} 条记录 / {top_nodes} 个顶层节点"
+                )
                 for record in records:
                     yield event.chain_result([record])
                 return
