@@ -16,8 +16,18 @@ from .data.html_scraper import fetch_many_bytes, gather_data
 from .data.models import Meta, Section
 from .img.render_cover import render_cover
 from .img.render_radar import render_radar
-from .render.forward import build_forward_records, flatten_to_plain_records
-from .render.tree import ForwardNodeData, ForwardTreeBuilder
+from .render.forward import (
+    _split_text,
+    build_records,
+    flatten_to_plain_records,
+    heading_components,
+)
+from .render.tree import (
+    BodyPart,
+    ForwardNodeData,
+    ForwardTreeBuilder,
+    sanitize_nodes,
+)
 
 MCMOD_PATTERN = r"https://www\.mcmod\.cn/(class|modpack)/(\d+)\.html"
 
@@ -123,7 +133,7 @@ class McmodCardPlugin(Star):
             logger.warning(f"生成雷达图失败: {exc}")
             return None
 
-    async def _build_payload(self, data: Dict[str, Any]) -> Tuple[ForwardTreeBuilder, Optional[ForwardNodeData], List[ForwardNodeData]]:
+    async def _build_payload(self, data: Dict[str, Any]) -> Tuple[ForwardTreeBuilder, Optional[ForwardNodeData], List[BodyPart]]:
         meta: Meta = data["meta"]
         sections: Sequence[Section] = data.get("sections") or []
         builder = ForwardTreeBuilder(self._tree_config())
@@ -132,8 +142,8 @@ class McmodCardPlugin(Star):
         cover = builder.image_data.get(meta.cover_url) if meta.cover_url else None
         radar = self._render_radar(meta) if builder.include_radar else None
         overview = builder.build_overview(meta, cover=cover, radar=radar)
-        body = builder.build_body(sections)
-        return builder, overview, body
+        parts = builder.build_body_parts(sections)
+        return builder, overview, parts
 
     # ------------------------------------------------------------------ 发送
     def _supports_forward(self, event: AstrMessageEvent) -> bool:
@@ -143,56 +153,75 @@ class McmodCardPlugin(Star):
             logger.debug(f"读取平台名称失败，按不支持合并转发处理: {exc}")
             return False
 
-    async def _send(
+    async def _send_overview(
         self,
         event: AstrMessageEvent,
-        builder: ForwardTreeBuilder,
         overview: Optional[ForwardNodeData],
-        body: Sequence[ForwardNodeData],
+        supports_forward: bool,
+        forward_overview: bool,
     ):
-        config = self._tree_config()
-        supports_forward = self._supports_forward(event)
-        forward_overview = supports_forward and self._bool("forward_overview", True)
-        forward_body = supports_forward and self._bool("forward_body", True)
-        fallback_to_text = self._bool("fallback_to_text", True)
-
-        if not supports_forward and not fallback_to_text:
-            yield event.plain_result(self._summary_text(builder, overview))
+        """概览：合并转发发送；不支持转发时退化为逐条普通消息。"""
+        if overview is None:
+            return
+        nodes = sanitize_nodes([overview])
+        if not nodes:
             return
 
-        records, leftovers = build_forward_records(
-            overview,
-            body,
-            config=config,
-            forward_overview=forward_overview,
-            forward_body=forward_body,
-        )
+        if forward_overview:
+            records = build_records(nodes, config=self._tree_config())
+            if records:
+                for record in records:
+                    yield event.chain_result([record])
+                return
 
+        for components in flatten_to_plain_records(
+            nodes, number_prefix=self._bool("number_prefix", True)
+        ):
+            yield event.chain_result(components)
+
+    async def _send_body(
+        self,
+        event: AstrMessageEvent,
+        parts: Sequence[BodyPart],
+        supports_forward: bool,
+        forward_body: bool,
+    ):
+        """正文：标题写在聊天记录外，内容放进紧跟其后的合并转发记录。"""
+        config = self._tree_config()
+        number_prefix = self._bool("number_prefix", True)
         sent_any = False
-        for record in records:
-            yield event.chain_result([record])
-            sent_any = True
+        heading_index = 0
 
-        plain_roots: List[ForwardNodeData] = list(leftovers)
-        if not forward_overview and overview is not None:
-            plain_roots = [overview] + [node for node in plain_roots if node is not overview]
-        if plain_roots:
-            messages = flatten_to_plain_records(
-                plain_roots,
-                number_prefix=self._bool("number_prefix", True),
-            )
-            for components in messages:
+        for part in parts:
+            nodes = sanitize_nodes(part.nodes)
+            heading_index += 1
+
+            # 标题始终作为普通消息单独发送，位于聊天记录之外
+            for components in _wrap_plain(heading_components(part)):
+                yield event.chain_result(components)
+                sent_any = True
+
+            if not nodes:
+                continue
+
+            if forward_body and supports_forward:
+                records = build_records(nodes, config=config)
+                for record in records:
+                    yield event.chain_result([record])
+                    sent_any = True
+                continue
+
+            for components in flatten_to_plain_records(
+                nodes,
+                number_prefix=number_prefix,
+                prefix=(heading_index,),
+            ):
                 yield event.chain_result(components)
                 sent_any = True
 
         if not sent_any:
             yield event.plain_result("检测到 MC 百科链接，但没有解析到可发送的内容")
 
-    def _summary_text(self, builder: ForwardTreeBuilder, overview: Optional[ForwardNodeData]) -> str:
-        content = overview.text() if overview is not None else ""
-        if not content:
-            return "当前平台不支持合并转发，请在 QQ（OneBot v11）中使用本插件"
-        return f"当前平台不支持合并转发，仅显示概要：\n{content}"
 
     # ------------------------------------------------------------------ 入口
     @filter.regex(MCMOD_PATTERN)
@@ -219,15 +248,60 @@ class McmodCardPlugin(Star):
             return
 
         try:
-            builder, overview, body = await self._build_payload(data)
+            builder, overview, parts = await self._build_payload(data)
         except Exception as exc:
             logger.error(f"构建转发内容失败: {exc}", exc_info=True)
             yield event.plain_result(FAIL_MESSAGE)
             return
 
-        async for result in self._send(event, builder, overview, body):
+        supports_forward = self._supports_forward(event)
+        if not supports_forward and not self._bool("fallback_to_text", True):
+            yield event.plain_result(self._plain_summary(overview, parts))
+            event.stop_event()
+            return
+
+        async for result in self._send_overview(
+            event,
+            overview,
+            supports_forward,
+            supports_forward and self._bool("forward_overview", True),
+        ):
+            yield result
+
+        async for result in self._send_body(
+            event,
+            parts,
+            supports_forward,
+            supports_forward and self._bool("forward_body", True),
+        ):
             yield result
         event.stop_event()
 
+    def _plain_summary(self, overview: Optional[ForwardNodeData], parts: Sequence[BodyPart]) -> str:
+        """既不支持合并转发、又关闭降级时的兜底：只发一段概要。"""
+        lines: List[str] = []
+        if overview is not None and overview.text():
+            lines.append(overview.text())
+        for part in parts:
+            lines.append(part.heading)
+            text = part.text()
+            if text:
+                lines.append(text)
+        content = "\n".join(line for line in lines if line)
+        if not content:
+            return "当前平台不支持合并转发，请在 QQ（OneBot v11）中使用本插件"
+        return content
+
     async def terminate(self) -> None:
         logger.info(f"插件 {self.plugin_name} 已卸载")
+
+def _wrap_plain(components: Sequence[Any]) -> List[List[Any]]:
+    """把一串组件按长度上限切成多条普通消息。"""
+    messages: List[List[Any]] = []
+    for component in components:
+        text = getattr(component, "text", "")
+        if not text:
+            continue
+        for chunk in _split_text(text):
+            messages.append([Comp.Plain(chunk)])
+    return messages or [[]]

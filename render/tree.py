@@ -1,19 +1,13 @@
 # -*- coding: utf-8 -*-
-"""把解析结果组织成「合并转发」树。
+"""把解析结果组织成发送结构。
 
-通用规则只有一条：**标题节点 → 子转发节点**。
+两条通用规则：
 
-    Node 5. 模组集成联动
-      ├─ Node 5.1 CEU 模组的全部功能（…）；
-      ├─ Node 5.2 无中生有联动（…）；
-      └─ …
+1. **标题写在聊天记录外**：每个标题（含 1/1.1/1.1.1 编号）作为一条普通消息发送；
+   标题与该标题之间的内容（段落、列表项、图片）放进紧随其后的合并转发记录。
+2. **标题层级决定编号**：mcmod 的 ``common-text-title-1/2/3`` 直接映射为 1 / 1.1 / 1.1.1。
 
-    Node 6. 画廊
-      ├─ Node 6.1 [图片] 新的多方块
-      └─ …
-
-段落、列表项、图片一律按「一个内容块 = 一个子转发节点」处理，不做任何标题级特殊逻辑。
-QQ 最多三层嵌套转发（[记录] → [标题节点] → [子节点]），更深的内容自动折叠进父节点文本。
+因此正文的深度恒为「记录 → 内容节点」两层，不再受 QQ 三层嵌套转发限制。
 """
 
 from __future__ import annotations
@@ -31,7 +25,7 @@ ContentBlock = Tuple[str, Any]
 #: 单条合并转发记录的节点数硬上限（QQ 端限制较严）
 HARD_NODE_LIMIT = 40
 
-#: 树深度硬上限（[记录] → [标题] → [子节点] = 3 层）
+#: 树深度硬上限（[记录] → [节点] = 2 层，留一层余量）
 HARD_DEPTH_LIMIT = 3
 
 DEFAULT_NODE_NAME = "MC百科"
@@ -56,19 +50,33 @@ class ForwardNodeData:
     def nodes_count(self) -> int:
         return 1 + sum(child.nodes_count() for child in self.children)
 
-    def depth(self) -> int:
-        if not self.children:
-            return 1
-        return 1 + max(child.depth() for child in self.children)
-
     def clone(self, depth: int = 0) -> "ForwardNodeData":
-        """按深度上限克隆子树，超出部分折叠为文本（QQ 最多三层）。"""
+        """按深度上限克隆子树，超出部分折叠为文本（保险措施）。"""
         node = ForwardNodeData(blocks=list(self.blocks))
         if depth + 1 >= HARD_DEPTH_LIMIT:
             node.blocks.extend(flatten_to_blocks(self.children))
             return node
         node.children = [child.clone(depth + 1) for child in self.children]
         return node
+
+
+@dataclass
+class BodyPart:
+    """一个标题及其直属内容：标题写在聊天记录外，内容进合并转发。"""
+
+    number: str = ""
+    title: str = ""
+    level: int = 1
+    nodes: List[ForwardNodeData] = field(default_factory=list)
+
+    @property
+    def heading(self) -> str:
+        if not self.title:
+            return f"{self.number}. 正文" if self.number else "正文"
+        return f"{self.number}. {self.title}" if self.number else self.title
+
+    def text(self) -> str:
+        return "\n".join(node.text() for node in self.nodes if node.text())
 
 
 def flatten_to_blocks(nodes: Sequence[ForwardNodeData]) -> List[ContentBlock]:
@@ -100,7 +108,7 @@ def plan_records(
     roots: Sequence[ForwardNodeData],
     max_nodes_per_message: int = HARD_NODE_LIMIT,
 ) -> List[List[ForwardNodeData]]:
-    """把根节点切成多条「合并转发记录」，不切开任何一个根节点的子树。"""
+    """把节点切成多条「合并转发记录」，不切开任何一个根节点的子树。"""
     limit = max(1, min(int(max_nodes_per_message or HARD_NODE_LIMIT), HARD_NODE_LIMIT))
     records: List[List[ForwardNodeData]] = []
     current: List[ForwardNodeData] = []
@@ -113,7 +121,7 @@ def plan_records(
             current = []
             current_count = 0
         if count > limit:
-            logger.warning(f"单个分区节点数 {count} 超过上限 {limit}，已单独作为一条转发记录")
+            logger.warning(f"单个节点树 {count} 个节点超过上限 {limit}，已单独成条")
         current.append(root)
         current_count += count
         if current_count >= limit:
@@ -127,7 +135,7 @@ def plan_records(
 
 
 class ForwardTreeBuilder:
-    """通用转发树构造器：标题 → 子转发，每个内容块一个子节点。"""
+    """构造「概览记录」与「正文标题 + 内容」结构。"""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
         config = config or {}
@@ -254,59 +262,35 @@ class ForwardTreeBuilder:
         return "支持的MC版本: " + "；".join(parts) if parts else ""
 
     # ------------------------------------------------------------------ 正文
-    def build_body(self, sections: Sequence[Section]) -> List[ForwardNodeData]:
-        """正文：按 common-text-title 的层级递归构造「标题 → 子转发」节点。
-
-        mcmod 的标题自带层级（``common-text-title-1/2/3``），因此:
-
-            common-text-title-1  →  1. 内容展示
-            common-text-title-2  →  1.1 科技模块
-            common-text-title-3  →  1.1.1 机械动力（Create）
-
-        标题与其下一个同级/更高级标题之间的内容块，按原始顺序成为该标题的子转发节点。
-        """
-        image_budget = self.max_images if self.include_images else 0
-        roots: List[ForwardNodeData] = []
-        stack: List[Tuple[int, ForwardNodeData]] = []
+    def build_body_parts(self, sections: Sequence[Section]) -> List[BodyPart]:
+        """按标题把正文拆成 BodyPart，编号遵循标题层级（1 / 1.1 / 1.1.1）。"""
+        parts: List[BodyPart] = []
         counters: List[int] = []
+        image_budget = self.max_images if self.include_images else 0
 
         for section in sections:
             level = max(1, int(section.level or 1))
-            while stack and stack[-1][0] >= level:
-                stack.pop()
             del counters[level:]  # 保留 1..level 级计数，重置更深层
             while len(counters) < level:
                 counters.append(0)
             counters[level - 1] += 1
             number = ".".join(str(value) for value in counters)
 
-            node = self._section_node(section, number, image_budget)
-            image_budget -= count_images(node)
+            nodes: List[ForwardNodeData] = []
+            for block in section.blocks:
+                node = self._block_node(block, image_budget)
+                if node is None:
+                    continue
+                image_budget -= len(node.images())
+                nodes.append(node)
 
-            if stack:
-                stack[-1][1].children.append(node)
-            else:
-                roots.append(node)
-            stack.append((level, node))
-        return roots
-
-    def _section_node(
-        self,
-        section: Section,
-        number: str,
-        image_budget: int,
-    ) -> ForwardNodeData:
-        title = f"{number}. {section.title}" if section.title else f"{number}. 正文"
-        node = ForwardNodeData(blocks=[("text", title)])
-        for block in section.blocks:
-            child = self._block_node(block, image_budget)
-            if child is None:
-                continue
-            node.children.append(child)
-        return node
+            parts.append(
+                BodyPart(number=number, title=section.title, level=level, nodes=nodes)
+            )
+        return parts
 
     def _block_node(self, block, image_budget: int) -> Optional[ForwardNodeData]:
-        """一个内容块 → 一个子转发节点（图片块带图片与图注）。"""
+        """一个内容块 → 一个转发节点（图片块带图片与图注）。"""
         if block.kind == "figure":
             if image_budget <= 0 or block.figure is None:
                 return None

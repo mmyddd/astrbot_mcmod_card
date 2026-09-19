@@ -108,6 +108,11 @@ def _is_title_span(node: Tag) -> bool:
     return bool(normalize_text(node.get_text("")))
 
 
+def _contains_title(node: Tag) -> bool:
+    """子树内是否还有标题 span（标题可能嵌在 <strong>/<span> 里）。"""
+    return node.find("span", class_=TITLE_CLASS) is not None
+
+
 class BodyParser:
     """把 ``li.text-area.common-text`` 解析成 Section 列表。"""
 
@@ -194,19 +199,18 @@ class BodyParser:
                 buffer.append("\n")
                 continue
 
-            title_span = child.find("span", class_=TITLE_CLASS)
-            if title_span is not None and _is_title_span(title_span):
+            if _is_title_span(child):
+                # 标题 span 是内容流的一部分（可能和图片、正文同处一个 <p>），
+                # 按 DOM 顺序就地成块，不吞掉同一段里的图片与文字。
                 flush()
-                title_text = normalize_text(title_span.get_text(""))
-                if title_text:
-                    blocks.append(
-                        Block(kind="title", text=title_text, level=_title_level(title_span))
+                blocks.append(
+                    Block(
+                        kind="title",
+                        text=normalize_text(child.get_text("")),
+                        level=_title_level(child),
                     )
-                remainder = normalize_text(
-                    child.get_text("").replace(title_span.get_text(""), "")
                 )
-                if remainder:
-                    blocks.append(Block(kind="para", text=remainder))
+                flush()
                 continue
 
             if name in ("ul", "ol"):
@@ -225,8 +229,13 @@ class BodyParser:
                 blocks.append(Block(kind="figure", figure=figure))
                 continue
 
-            if name in INLINE_TAGS and not child.find(["img", "br"]):
-                # 行内元素（超链接 / 加粗等）并入当前段落，保持文字顺序
+            if (
+                name in INLINE_TAGS
+                and not child.find(["img", "br"])
+                and not _contains_title(child)
+            ):
+                # 行内元素（超链接 / 加粗等）并入当前段落，保持文字顺序。
+                # 内含标题的行内元素必须继续下钻，否则会把标题连同同段内容一起吞掉。
                 buffer.append(child.get_text(""))
                 continue
 
@@ -251,11 +260,20 @@ class BodyParser:
         return blocks
 
     def _parse_table(self, node: Tag) -> List[Block]:
-        """表格以图片抽取为主；纯文字表格降级为一行文本。"""
+        """表格以图片抽取为主；纯文字表格降级为一行文本。
+
+        mcmod 的画廊表格是「一个单元格一张图」，逐格解析才能一张不漏；
+        直接递归 <tbody>/<tr> 会丢格。
+        """
+        cells = node.find_all("td") or node.find_all("th")
         blocks: List[Block] = []
-        for child in node.children:
-            if isinstance(child, Tag):
-                blocks.extend(self._parse_children(child))
+        if cells:
+            for cell in cells:
+                blocks.extend(self._parse_children(cell))
+        else:
+            for child in node.children:
+                if isinstance(child, Tag):
+                    blocks.extend(self._parse_children(child))
 
         figures = [block for block in blocks if block.kind == "figure"]
         texts = [

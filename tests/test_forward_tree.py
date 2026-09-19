@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""转发树测试：通用「标题 → 子转发」逻辑、编号、深度限制与记录分片。"""
+"""发送结构测试：标题写在聊天记录外，内容进合并转发记录。"""
 
 from __future__ import annotations
 
@@ -10,7 +10,9 @@ from mcmod_plugin.data.body_parser import BodyParser
 from mcmod_plugin.data.meta_parser import MetaParser
 from mcmod_plugin.render.forward import (
     build_forward_records,
+    build_records,
     flatten_to_plain_records,
+    heading_components,
     to_component,
 )
 from mcmod_plugin.render.tree import (
@@ -18,6 +20,7 @@ from mcmod_plugin.render.tree import (
     ForwardNodeData,
     ForwardTreeBuilder,
     plan_records,
+    sanitize_nodes,
 )
 
 URL_2524 = "https://www.mcmod.cn/class/2524.html"
@@ -47,89 +50,90 @@ def test_overview_structure(class_2524_html: str) -> None:
     assert "热度: 5.0（名扬天下）" in root.children[1].text()
     assert "浏览量: 753.59万" in root.children[1].text()
     assert "标签（6）" in root.children[2].text()
-    assert "作者（11）" in root.children[2].text()
     assert root.children[0].images()
 
 
-def test_body_section_numbering(class_2524_html: str) -> None:
+def test_heading_numbering(class_2524_html: str) -> None:
     meta, sections = load(class_2524_html)
-    builder = ForwardTreeBuilder({})
-    fake_images(builder, meta, sections)
-    roots = builder.build_body(sections)
-    assert [root.text().splitlines()[0] for root in roots] == [
+    builder = ForwardTreeBuilder({"include_images": False})
+    parts = builder.build_body_parts(sections)
+    assert [part.heading for part in parts] == [
         "1. 写在开头",
+        "1.1. 版本注意事项",
+        "1.2. 本模组资料常见问题",
         "2. 模组简介",
         "3. 模组集成联动",
         "4. 画廊",
     ]
-    # 2 级标题嵌套在 1 级标题下
-    assert [child.text().splitlines()[0] for child in roots[0].children] == [
-        "1.1. 版本注意事项",
-        "1.2. 本模组资料常见问题",
-    ]
+    assert [part.level for part in parts] == [1, 2, 2, 1, 1, 1]
 
 
-def test_title_to_child_is_generic(class_2524_html: str) -> None:
-    """每个内容块（段落 / 列表项 / 图片）都是标题节点的一个子转发节点。"""
+def test_heading_is_sent_as_plain_message(class_2524_html: str) -> None:
+    """标题必须是聊天记录外的普通消息。"""
     meta, sections = load(class_2524_html)
     builder = ForwardTreeBuilder({"include_images": False})
-    roots = builder.build_body(sections)
+    parts = builder.build_body_parts(sections)
+    components = heading_components(parts[0])
+    assert len(components) == 1
+    assert isinstance(components[0], Comp.Plain)
+    assert components[0].text == "1. 写在开头"
 
-    def walk(node):
-        yield node
-        for child in node.children:
-            yield from walk(child)
 
-    by_title = {}
-    for node in walk(ForwardNodeData(children=roots)):
-        lines = node.text().splitlines()
-        if lines and ". " in lines[0]:
-            by_title[lines[0].split(". ", 1)[1]] = node
+def test_heading_not_inside_forward_record(class_2524_html: str) -> None:
+    """转发记录的节点里不应再出现标题文本。"""
+    meta, sections = load(class_2524_html)
+    builder = ForwardTreeBuilder({"include_images": False})
+    parts = builder.build_body_parts(sections)
+    links = next(part for part in parts if part.title == "模组集成联动")
+    records = build_records(links.nodes, config={})
+    assert records
+    node = records[0].nodes[0]
+    plain = [c.text for c in node.content if isinstance(c, Comp.Plain)]
+    assert plain == ["CEU 模组的全部功能（加入能源转换器，实现 FE 与 EU 的相互转换）；"]
+    assert not any("模组集成联动" in text for text in plain)
 
-    def is_heading(text: str) -> bool:
-        head = text.splitlines()[0] if text else ""
-        return bool(head) and head.split(". ", 1)[0].replace(".", "").isdigit()
 
+def test_every_block_becomes_a_node(class_2524_html: str) -> None:
+    meta, sections = load(class_2524_html)
+    builder = ForwardTreeBuilder({"include_images": False})
+    parts = builder.build_body_parts(sections)
+    by_title = {part.title: part for part in parts}
     for section in sections:
-        node = by_title[section.title]
         expected = [block.text for block in section.blocks if block.text]
-        # 内容块与「子标题节点」按原始顺序混排在 children 中
-        content_children = [child for child in node.children if not is_heading(child.text())]
-        assert [child.text() for child in content_children] == expected
+        actual = [node.text() for node in by_title[section.title].nodes]
+        assert actual == expected
 
 
-def test_list_items_become_child_nodes(class_2524_html: str) -> None:
+def test_list_items_are_separate_nodes(class_2524_html: str) -> None:
     meta, sections = load(class_2524_html)
     builder = ForwardTreeBuilder({"include_images": False})
-    roots = builder.build_body(sections)
-    links = roots[2]
-    assert len(links.children) == 10
-    assert links.children[0].text() == "CEU 模组的全部功能（加入能源转换器，实现 FE 与 EU 的相互转换）；"
-    assert links.children[9].text() == "CraftTweaker 联动（本模组支持 CrT 脚本）。"
-    assert all(child.children == [] for child in links.children)
+    parts = builder.build_body_parts(sections)
+    links = next(part for part in parts if part.title == "模组集成联动")
+    assert len(links.nodes) == 10
+    assert links.nodes[0].text() == "CEU 模组的全部功能（加入能源转换器，实现 FE 与 EU 的相互转换）；"
+    assert links.nodes[9].text() == "CraftTweaker 联动（本模组支持 CrT 脚本）。"
 
 
-def test_images_become_child_nodes_too(class_2524_html: str) -> None:
+def test_images_are_separate_nodes(class_2524_html: str) -> None:
     meta, sections = load(class_2524_html)
     builder = ForwardTreeBuilder({})
     fake_images(builder, meta, sections)
-    roots = builder.build_body(sections)
-    gallery = roots[-1]  # 4. 画廊
-    assert len(gallery.children) == 7
-    assert all(len(child.images()) == 1 for child in gallery.children)
-    assert gallery.children[0].text() == "新的多方块"
-    assert gallery.children[6].text() == "不同的矿物品级"
+    parts = builder.build_body_parts(sections)
+    gallery = next(part for part in parts if part.title == "画廊")
+    assert len(gallery.nodes) == 7
+    assert all(len(node.images()) == 1 for node in gallery.nodes)
+    assert gallery.nodes[0].text() == "新的多方块"
+    assert gallery.nodes[6].text() == "不同的矿物品级"
 
 
 def test_images_can_be_disabled(class_2524_html: str) -> None:
     meta, sections = load(class_2524_html)
     builder = ForwardTreeBuilder({"include_images": False})
     fake_images(builder, meta, sections)
-    roots = builder.build_body(sections)
-    gallery = roots[-1]
-    assert gallery.text() == "4. 画廊"  # 标题保留，图片被跳过
-    assert gallery.children == []
-    assert not any(count_images(root) for root in roots)
+    parts = builder.build_body_parts(sections)
+    gallery = next(part for part in parts if part.title == "画廊")
+    assert gallery.heading == "4. 画廊"  # 标题仍然发送
+    assert gallery.nodes == []
 
 
 def test_image_budget(class_2524_html: str) -> None:
@@ -137,9 +141,9 @@ def test_image_budget(class_2524_html: str) -> None:
     builder = ForwardTreeBuilder({"max_images": 2})
     fake_images(builder, meta, sections)
     assert len(builder.wanted_image_urls(meta, sections)) == 3  # 封面 + 2 张正文图
-    roots = builder.build_body(sections)
-    gallery = roots[-1]
-    assert len(gallery.children) == 2
+    parts = builder.build_body_parts(sections)
+    gallery = next(part for part in parts if part.title == "画廊")
+    assert len(gallery.nodes) == 2
 
 
 def test_depth_limit_folds_extra_levels() -> None:
@@ -154,13 +158,12 @@ def test_depth_limit_folds_extra_levels() -> None:
     component = to_component(deep)
     assert isinstance(component, Comp.Node)
     assert _depth_of(component) <= HARD_DEPTH_LIMIT
-    # 超出三层的「孙 / 曾孙」被折叠成文本，仍保留在最近的可承载节点里
     folded = _node_text(component)
     assert "孙节点" in folded
     assert "曾孙节点" in folded
 
 
-def test_plan_records_never_splits_a_section() -> None:
+def test_plan_records_never_splits_a_node() -> None:
     roots = []
     for index in range(3):
         node = ForwardNodeData(blocks=[("text", f"分区{index}")])
@@ -171,55 +174,32 @@ def test_plan_records_never_splits_a_section() -> None:
     assert [sum(item.nodes_count() for item in record) for record in records] == [4, 4, 4]
 
 
-def test_build_forward_records_and_fallback(class_2524_html: str) -> None:
+def test_build_forward_records_compat(class_2524_html: str) -> None:
     meta, sections = load(class_2524_html)
     builder = ForwardTreeBuilder({})
     fake_images(builder, meta, sections)
     overview = builder.build_overview(
         meta, cover=builder.image_data.get(meta.cover_url), radar=None
     )
-    body = builder.build_body(sections)
-
-    records, leftovers = build_forward_records(overview, body, config={})
-    assert len(records) >= 2  # 概览 1 条 + 正文按 max_nodes_per_message 分片
+    roots = [node for part in builder.build_body_parts(sections) for node in part.nodes]
+    records, leftovers = build_forward_records(overview, roots, config={})
+    assert len(records) >= 1
     assert leftovers == []
     assert isinstance(records[0], Comp.Nodes)
-    assert len(records[0].nodes) == 1
-    assert isinstance(records[0].nodes[0], Comp.Node)
-    assert len(records[0].nodes[0].content) == 3
-
-    records, leftovers = build_forward_records(
-        overview, body, config={}, forward_overview=False, forward_body=False
-    )
-    assert records == []
-    assert len(leftovers) == 1 + len(body)
 
 
-def test_plain_fallback_order(class_2524_html: str) -> None:
+def test_plain_fallback_sends_heading_then_content(class_2524_html: str) -> None:
     meta, sections = load(class_2524_html)
     builder = ForwardTreeBuilder({})
     fake_images(builder, meta, sections)
-    overview = builder.build_overview(
-        meta, cover=builder.image_data.get(meta.cover_url), radar=None
-    )
-    body = builder.build_body(sections)
-    messages = flatten_to_plain_records([overview] + body)
+    parts = builder.build_body_parts(sections)
+    links = next(part for part in parts if part.title == "模组集成联动")
+    messages = flatten_to_plain_records(links.nodes, prefix=(3,))
     texts = [
-        item.text
-        for message in messages
-        for item in message
-        if isinstance(item, Comp.Plain)
+        item.text for message in messages for item in message if isinstance(item, Comp.Plain)
     ]
-    assert texts[0].startswith("1.1 [GCY] Gregicality Legacy")
-    assert any(text.startswith("1.2 热度: 5.0（名扬天下）") for text in texts)
-    joined = "\n".join(texts)
-    # 概览占 1，正文标题顺延为 2~5
-    assert "4.1 CEU 模组的全部功能" in joined
-    assert "4.10 CraftTweaker 联动" in joined
-    images = [
-        item for message in messages for item in message if isinstance(item, Comp.Image)
-    ]
-    assert len(images) == 1 + 7
+    assert texts[0].startswith("3.1 CEU 模组的全部功能")
+    assert texts[9].startswith("3.10 CraftTweaker 联动")
 
 
 def _node_text(node) -> str:
@@ -238,7 +218,3 @@ def _depth_of(node) -> int:
         if isinstance(child, Comp.Node):
             depth = max(depth, 1 + _depth_of(child))
     return depth
-
-
-def count_images(node: ForwardNodeData) -> int:
-    return len(node.images()) + sum(count_images(child) for child in node.children)

@@ -17,7 +17,7 @@ def build(html: str, url: str, content_type: str):
     meta = MetaParser(soup, url=url, content_type=content_type).parse()
     sections = BodyParser(soup).parse()
     builder = ForwardTreeBuilder({"include_images": False})
-    return sections, builder.build_body(sections)
+    return sections, builder.build_body_parts(sections)
 
 
 def test_heading_levels_are_parsed(modpack_897_html: str) -> None:
@@ -32,67 +32,61 @@ def test_heading_levels_are_parsed(modpack_897_html: str) -> None:
 
 
 def test_nested_numbering(modpack_897_html: str) -> None:
-    _, roots = build(modpack_897_html, URL_897, "modpack")
-    titles = [root.text().splitlines()[0] for root in roots]
-    assert titles[0] == "1. 简介"
-    assert titles[1] == "2. 总体介绍"
-    assert titles[2] == "3. 内容展示"
-    assert titles[-1] == "7. 部分已添加 / 正在开发的特色内容"
-
-    content = roots[2]
-    assert content.children[0].text() == "3.1. 科技模块"
-    assert content.children[1].text() == "3.2. 魔法模块"
-    assert content.children[2].text() == "3.3. 冒险模块"
-
-
-def test_level3_headings_nest_under_level2(modpack_897_html: str) -> None:
-    _, roots = build(modpack_897_html, URL_897, "modpack")
-    tech = roots[2].children[0]
-    headings = [
-        child.text().split("\n")[0]
-        for child in tech.children
-        if child.text().startswith("3.1.")
-    ]
-    assert headings == [
-        "3.1.1. 机械动力（Create）",
-        "3.1.2. 格雷科技（Gregtech）",
-        "3.1.3. 血肉重铸2（Biomancy 2）",
-        "3.1.4. 应用能源2（Applied Energistics 2）",
-    ]
-
-
-def test_level3_body_follows_its_own_heading(modpack_897_html: str) -> None:
-    _, roots = build(modpack_897_html, URL_897, "modpack")
-    tech = roots[2].children[0]
-    children = tech.children
-    create = next(child for child in children if child.text().startswith("3.1.1."))
-    assert create.text().splitlines()[0] == "3.1.1. 机械动力（Create）"
-    assert any("齿轮风格科技玩法" in child.text() for child in create.children)
-    # 后继标题不会把前面标题的正文带走
-    gregtech = next(child for child in children if child.text().startswith("3.1.2."))
-    assert gregtech.text() == "3.1.2. 格雷科技（Gregtech）"
+    _, parts = build(modpack_897_html, URL_897, "modpack")
+    headings = [part.heading for part in parts]
+    assert headings[0] == "1. 简介"
+    assert headings[1] == "2. 总体介绍"
+    assert headings[2] == "3. 内容展示"
+    assert headings[3] == "3.1. 科技模块"
+    assert headings[4] == "3.1.1. 机械动力（Create）"
+    assert headings[5] == "3.1.2. 格雷科技（Gregtech）"
+    assert headings[6] == "3.1.3. 血肉重铸2（Biomancy 2）"
+    assert headings[7] == "3.1.4. 应用能源2（Applied Energistics 2）"
+    assert headings[8] == "3.2. 魔法模块"
+    assert headings[-1].startswith("7. 部分已添加")
 
 
 def test_deeper_levels_reset_after_higher_level(modpack_897_html: str) -> None:
-    _, roots = build(modpack_897_html, URL_897, "modpack")
-    content = roots[2]
-    magic = content.children[1]
-    # 同级 3 级标题在进入新的 2 级标题后重新从 1 开始编号
-    assert magic.children[2].text().startswith("3.2.1. 植物魔法（Botania）")
-    assert magic.children[3].text().startswith("3.2.2. 血魔法3（Blood Magic3）")
+    _, parts = build(modpack_897_html, URL_897, "modpack")
+    headings = [part.heading for part in parts]
+    # 进入新的 2 级标题后，3 级编号重新从 1 开始
+    assert "3.2.1. 植物魔法（Botania）" in headings
+    assert "3.2.2. 血魔法3（Blood Magic3）" in headings
+    assert "3.3.1. 艾利克斯的洞穴" not in headings  # 冒险模块无 3 级标题
+
+
+def test_level3_body_belongs_to_its_own_heading(modpack_897_html: str) -> None:
+    _, parts = build(modpack_897_html, URL_897, "modpack")
+    create = next(part for part in parts if part.title == "机械动力（Create）")
+    assert create.heading == "3.1.1. 机械动力（Create）"
+    assert any("齿轮风格科技玩法" in node.text() for node in create.nodes)
+    # 相邻标题的正文不会串到上一个标题里
+    greg = next(part for part in parts if part.title == "格雷科技（Gregtech）")
+    assert all("齿轮风格科技玩法" not in node.text() for node in greg.nodes)
+
+
+def test_content_is_not_absorbed_by_headings(modpack_897_html: str) -> None:
+    """标题在同一 <p> 内与图片/正文混排时，内容不能被标题吞掉。
+
+    AE2 那段正文在 DOM 上位于「魔法模块」标题之前，因此归属「应用能源2」。
+    """
+    _, parts = build(modpack_897_html, URL_897, "modpack")
+    ae2 = next(part for part in parts if part.title == "应用能源2（Applied Energistics 2）")
+    assert any("对 AE2 进行了深度魔改" in node.text() for node in ae2.nodes)
+
+    magic = next(part for part in parts if part.title == "魔法模块")
+    assert all("对 AE2 进行了深度魔改" not in node.text() for node in magic.nodes)
 
 
 def test_flat_pages_still_number_linearly(class_2524_html: str) -> None:
-    sections, roots = build(
+    sections, parts = build(
         class_2524_html, "https://www.mcmod.cn/class/2524.html", "class"
     )
-    # 模组页只有 1/2 级标题：写在开头(1) 下挂 版本注意事项(1.1)
-    assert roots[0].text().splitlines()[0] == "1. 写在开头"
-    assert roots[0].children[0].text().splitlines()[0] == "1.1. 版本注意事项"
-    # 「模组简介」回到 1 级，编号继续递增而不是嵌套
-    titles = [root.text().splitlines()[0] for root in roots]
-    assert titles == [
+    headings = [part.heading for part in parts]
+    assert headings == [
         "1. 写在开头",
+        "1.1. 版本注意事项",
+        "1.2. 本模组资料常见问题",
         "2. 模组简介",
         "3. 模组集成联动",
         "4. 画廊",
@@ -100,13 +94,7 @@ def test_flat_pages_still_number_linearly(class_2524_html: str) -> None:
 
 
 def test_no_section_is_lost(modpack_897_html: str) -> None:
-    sections, roots = build(modpack_897_html, URL_897, "modpack")
-
-    def collect(nodes):
-        for node in nodes:
-            yield node.text().splitlines()[0]
-            yield from collect(node.children)
-
-    headings = [text for text in collect(roots) if text]
+    sections, parts = build(modpack_897_html, URL_897, "modpack")
+    titles = [part.title for part in parts]
     for section in sections:
-        assert any(text.endswith(section.title) for text in headings), section.title
+        assert section.title in titles, section.title
