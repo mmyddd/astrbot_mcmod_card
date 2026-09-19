@@ -24,8 +24,8 @@ ContentBlock = Tuple[str, Any]
 
 #: 单条合并转发记录的顶层节点数上限
 #: 结构已完全扁平，QQ 对「messages 数组长度」的容忍度较高（实测 60+ 正常），
-#: 留一点余量并允许配置覆盖。
-HARD_NODE_LIMIT = 80
+#: 默认 100 并允许配置在 1~100 之间覆盖。
+HARD_NODE_LIMIT = 100
 
 #: 树深度硬上限（[记录] → [节点] = 2 层，留一层余量）
 HARD_DEPTH_LIMIT = 3

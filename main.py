@@ -100,7 +100,7 @@ class McmodCardPlugin(Star):
             "include_radar": self._bool("include_radar", True),
             "include_images": self._bool("include_images", True),
             "max_images": self._int("max_images", 40, 0, 100),
-            "max_nodes_per_message": self._int("max_nodes_per_message", 40, 1, 40),
+            "max_nodes_per_message": self._int("max_nodes_per_message", 100, 1, 100),
         }
 
     # ------------------------------------------------------------------ 构建

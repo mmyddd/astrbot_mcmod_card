@@ -32,13 +32,13 @@
   "max_nodes_per_message": {
     "description": "单条合并转发的最大节点数",
     "type": "int",
-    "default": 40,
+    "default": 100,
     "slider": {
       "min": 1,
-      "max": 40,
+      "max": 100,
       "step": 1
     },
-    "hint": "正文节点过多时会按「标题」边界拆成多条转发记录依次发送，不会把一个标题的子节点拆开。QQ 上限约 40。"
+    "hint": "超过该数量时会按顺序拆成多条转发记录依次发送。节点结构是扁平的，100 以内通常无需调整。"
   },
   "overview_split": {
     "description": "概览拆成 1/2/3 三个子转发节点",
