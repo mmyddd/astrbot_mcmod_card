@@ -64,12 +64,24 @@ def read_cache(cache_dir: Optional[Path], url: str, ttl: int) -> Optional[Dict[s
         return None
 
     if payload.get("schema") != SCHEMA_VERSION:
-        logger.debug(f"缓存结构版本不匹配，忽略旧缓存: {url}")
+        logger.info(
+            f"缓存结构版本不匹配（缓存={payload.get('schema')} 当前={SCHEMA_VERSION}），丢弃并重新解析: {url}"
+        )
         return None
     if time.time() - float(payload.get("timestamp", 0) or 0) >= ttl:
         return None
     content = payload.get("content")
-    return content if isinstance(content, dict) else None
+    if not isinstance(content, dict):
+        return None
+    # 结构自检：分区必须是可解析的列表，避免残缺缓存导致内容缺失
+    sections = content.get("sections")
+    if not isinstance(sections, list):
+        logger.warning(f"缓存内容缺少 sections，丢弃并重新解析: {url}")
+        return None
+    if sections and not all(isinstance(item, dict) for item in sections):
+        logger.warning(f"缓存 sections 结构异常，丢弃并重新解析: {url}")
+        return None
+    return content
 
 
 def write_cache(cache_dir: Optional[Path], url: str, content: Dict[str, Any]) -> None:

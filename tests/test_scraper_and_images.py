@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 from mcmod_plugin.data.html_scraper import (
     cache_path,
@@ -33,6 +34,45 @@ def test_cache_ignores_legacy_schema(tmp_path) -> None:
         encoding="utf-8",
     )
     assert read_cache(tmp_path, URL, ttl=3600) is None
+
+
+def test_cache_rejects_any_older_schema(tmp_path) -> None:
+    """任何旧 schema 都必须失效，不能被 TTL 内直接复用。"""
+    path = cache_path(tmp_path, URL)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    for old_version in range(1, SCHEMA_VERSION):
+        path.write_text(
+            json.dumps({
+                "schema": old_version,
+                "timestamp": time.time(),
+                "content": {"meta": {}, "sections": []},
+            }),
+            encoding="utf-8",
+        )
+        assert read_cache(tmp_path, URL, ttl=86400) is None, (
+            f"schema={old_version} 的旧缓存不应被命中"
+        )
+
+
+def test_cache_rejects_broken_content(tmp_path) -> None:
+    """结构残缺的缓存宁可重解析，也不能拿来做输出。"""
+    path = cache_path(tmp_path, URL)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    for broken in (
+        {"meta": {}},
+        {"meta": {}, "sections": None},
+        {"meta": {}, "sections": ["not-a-dict"]},
+        "not-a-dict",
+    ):
+        path.write_text(
+            json.dumps({
+                "schema": SCHEMA_VERSION,
+                "timestamp": time.time(),
+                "content": broken,
+            }),
+            encoding="utf-8",
+        )
+        assert read_cache(tmp_path, URL, ttl=86400) is None, f"残缺缓存被命中: {broken}"
 
 
 def test_cache_respects_ttl(tmp_path) -> None:

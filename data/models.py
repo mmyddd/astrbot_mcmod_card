@@ -6,8 +6,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-#: 缓存结构版本，解析结果结构变化时递增（旧缓存自动失效）
-SCHEMA_VERSION = 2
+#: 缓存结构版本。**只要解析/分段/排序逻辑有变化就必须递增**，
+#: 否则旧缓存（可能顺序错乱、内容缺失）会在 TTL 内被直接复用。
+#:
+#: 2 → 3：标题按 DOM 顺序切分、图片不再丢失、标题层级化编号。
+SCHEMA_VERSION = 3
 
 #: 雷达图维度（与 mcmod 评分弹窗一一对应）
 RATING_KEYS = (
