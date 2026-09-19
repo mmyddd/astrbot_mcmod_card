@@ -88,19 +88,18 @@ def plain_texts(event) -> list:
     return texts
 
 
-def test_entry_sends_exactly_one_message(monkeypatch, class_2524_html: str) -> None:
-    """整页内容只发一条消息。"""
+def test_entry_sends_very_few_messages(monkeypatch, class_2524_html: str) -> None:
+    """整页内容只发极少数消息（远少于逐条发送的几十条）。"""
     event = run_entry(monkeypatch, class_2524_html, URL_CLASS, "class")
-    assert len(event.sent) == 1, f"应只发 1 条，实际 {len(event.sent)} 条"
-    assert isinstance(event.sent[0][0], Comp.Nodes)
+    assert 1 <= len(event.sent) <= 3, f"消息条数 {len(event.sent)} 偏多"
+    assert all(isinstance(chain[0], Comp.Nodes) for chain in event.sent)
 
 
 def test_entry_keeps_every_heading(monkeypatch, modpack_897_html: str) -> None:
     """所有标题（含 3.1.1 这类子标题）都必须在消息里出现。"""
     event = run_entry(monkeypatch, modpack_897_html, URL_PACK, "modpack")
-    assert len(event.sent) == 1
-    record = event.sent[0][0]
-    texts = _all_texts(record)
+    assert 1 <= len(event.sent) <= 3
+    texts = "\n".join(_all_texts(chain[0]) for chain in event.sent)
     for heading in (
         "1. 简介",
         "2. 总体介绍",

@@ -22,8 +22,10 @@ from ..data.models import Meta, Section
 #: 一个节点内的内容块：("text", 文本) 或 ("image", 图片字节)
 ContentBlock = Tuple[str, Any]
 
-#: 单条合并转发记录的顶层节点数上限（QQ 端限制较严）
-HARD_NODE_LIMIT = 50
+#: 单条合并转发记录的顶层节点数上限
+#: 结构已完全扁平，QQ 对「messages 数组长度」的容忍度较高（实测 60+ 正常），
+#: 留一点余量并允许配置覆盖。
+HARD_NODE_LIMIT = 80
 
 #: 树深度硬上限（[记录] → [节点] = 2 层，留一层余量）
 HARD_DEPTH_LIMIT = 3
@@ -79,37 +81,55 @@ class BodyPart:
         return "\n".join(node.text() for node in self.nodes if node.text())
 
 
+def flatten_leaves(nodes: Sequence[ForwardNodeData]) -> List[ForwardNodeData]:
+    """把任意节点树压成**一层叶子列表**（前序：本节点内容在前，子节点在后）。
+
+    硬性约束：每个节点只允许包含自己的内容块（纯文本或纯图片），
+    **绝不允许同时包含文本与子节点**——OneBot/NapCat 无法发送这种混合节点。
+    因此这里把任何「既有内容又有子节点」的节点拆成两个兄弟节点。
+    """
+    flat: List[ForwardNodeData] = []
+    for node in nodes:
+        blocks = [block for block in node.blocks if block[1]]
+        if blocks:
+            flat.append(ForwardNodeData(blocks=blocks))
+        if node.children:
+            flat.extend(flatten_leaves(node.children))
+    return flat
+
+
 def build_record_nodes(
     overview: Optional[ForwardNodeData],
     parts: Sequence[BodyPart],
 ) -> List[ForwardNodeData]:
-    """把所有内容装进**同一条**合并转发记录的节点列表。
+    """把所有内容装进**同一条**合并转发记录的节点列表（结构完全扁平）。
 
-    结构（层级即 QQ 的三层嵌套上限）::
+    顺序即阅读顺序，**先标题、后内容**；标题与内容互为兄弟节点，不做任何嵌套::
 
-        [合并转发记录]
-          ├─ 概览节点（含 1.1 / 1.2 / 1.3 子节点）
-          ├─ 1. 写在开头
-          │    └─ 段落 / 列表项 / 图片
-          ├─ 1.1. 版本注意事项
-          │    └─ …
-          └─ …
+        [合并转发记录]        ← 整条记录只有 1 层，深度恒为 1
+          ├─ 概览：封面 + 名称
+          ├─ 概览：热度 / 指数 / 浏览量
+          ├─ 概览：标签与作者
+          ├─ 1. 写在开头                    ← 标题（纯文本）
+          ├─ 1.1. 版本注意事项              ← 标题（纯文本）
+          ├─ 注1：由 i18n自动汉化更新…       ← 内容（标题的下一个兄弟节点）
+          ├─ 注2：此模组以 0.24.0-final…
+          ├─ …
+          └─ 4. 画廊
+               ├─ [图片] 新的多方块          ← 图片各自成节点
+               └─ …
 
-    标题节点互为兄弟（编号 1 / 1.1 / 1.1.1 体现层级），内容挂在其下，
-    因此深度恒为「记录 → 标题 → 内容」，既保留层级又不会超限。
+    每个节点只承载自己的内容，绝不混排；整条记录深度恒为 1，
+    既不受 QQ 嵌套层数限制，也避开了「文本 + 子节点混合」无法发送的问题。
     """
-    nodes: List[ForwardNodeData] = []
+    raw: List[ForwardNodeData] = []
     if overview is not None:
-        if overview.blocks or not overview.children:
-            nodes.append(overview)
-        else:
-            # 概览本身只是分组壳（1.1/1.2/1.3），展开成同级节点避免空节点
-            nodes.extend(overview.children)
+        raw.append(overview)
     for part in parts:
-        node = ForwardNodeData(blocks=[("text", part.heading)]) if part.heading else ForwardNodeData()
-        node.children = list(part.nodes)
-        nodes.append(node)
-    return sanitize_nodes(nodes)
+        if part.heading:
+            raw.append(ForwardNodeData(blocks=[("text", part.heading)]))
+        raw.extend(part.nodes)
+    return flatten_leaves(raw)
 
 
 def flatten_to_blocks(nodes: Sequence[ForwardNodeData]) -> List[ContentBlock]:
