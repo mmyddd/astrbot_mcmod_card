@@ -42,3 +42,8 @@ def class_1188_html() -> str:
 @pytest.fixture(scope="session")
 def modpack_1_html() -> str:
     return (FIXTURES / "modpack_1.html").read_text(encoding="utf-8")
+
+
+@pytest.fixture(scope="session")
+def modpack_897_html() -> str:
+    return (FIXTURES / "modpack_897.html").read_text(encoding="utf-8")

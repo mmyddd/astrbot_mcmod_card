@@ -72,16 +72,34 @@ def to_component(
 ) -> Comp.Node:
     """递归把转发节点转为 ``Comp.Node``（内容只允许 Plain / Image）。
 
-    QQ 最多支持三层嵌套转发（[记录] → [标题] → [子节点]），
-    到达深度上限后子树会被折叠进当前节点的内容，保证不会超限。
+    QQ 最多支持三层嵌套转发（[记录] → [标题] → [子节点]）。到达深度上限时，
+    子节点不再继续嵌套，而是折叠为「标题行 + 缩进正文」的文本，保留层级可读性。
     """
     content = _components_from_blocks(data.blocks)
     if depth >= HARD_DEPTH_LIMIT:
-        content.extend(_components_from_blocks(flatten_to_blocks(data.children)))
+        content.extend(_components_from_blocks(_fold_children(data.children)))
     else:
         for child in data.children:
             content.append(to_component(child, name=name, uin=uin, depth=depth + 1))
     return Comp.Node(content=content, name=name, uin=uin)
+
+
+def _fold_children(nodes: Sequence[ForwardNodeData]) -> List[Tuple[str, Any]]:
+    """把子树折叠成缩进文本；带标题的节点保留「标题行 + 正文」结构。"""
+    blocks: List[Tuple[str, Any]] = []
+    for node in nodes:
+        lines = node.text().split("\n") if node.text() else []
+        heading = lines[0] if lines else ""
+        body = lines[1:]
+        if heading:
+            # 形如 "3.1.1. 机械动力（Create）" 的标题单独成行，正文缩进两格
+            blocks.append(("text", f"\n{heading}"))
+        for line in body:
+            blocks.append(("text", f"　　{line}"))
+        for image in node.images():
+            blocks.append(("image", image))
+        blocks.extend(_fold_children(node.children))
+    return blocks
 
 
 def build_forward_records(

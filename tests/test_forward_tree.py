@@ -58,11 +58,14 @@ def test_body_section_numbering(class_2524_html: str) -> None:
     roots = builder.build_body(sections)
     assert [root.text().splitlines()[0] for root in roots] == [
         "1. 写在开头",
-        "2. 版本注意事项",
-        "3. 本模组资料常见问题",
-        "4. 模组简介",
-        "5. 模组集成联动",
-        "6. 画廊",
+        "2. 模组简介",
+        "3. 模组集成联动",
+        "4. 画廊",
+    ]
+    # 2 级标题嵌套在 1 级标题下
+    assert [child.text().splitlines()[0] for child in roots[0].children] == [
+        "1.1. 版本注意事项",
+        "1.2. 本模组资料常见问题",
     ]
 
 
@@ -71,19 +74,35 @@ def test_title_to_child_is_generic(class_2524_html: str) -> None:
     meta, sections = load(class_2524_html)
     builder = ForwardTreeBuilder({"include_images": False})
     roots = builder.build_body(sections)
-    source = {section.title: section for section in sections}
-    for root in roots:
-        title = root.text().split(". ", 1)[1]
-        expected = [block for block in source[title].blocks if block.text]
-        assert len(root.children) == len(expected)
-        assert [child.text() for child in root.children] == [block.text for block in expected]
+
+    def walk(node):
+        yield node
+        for child in node.children:
+            yield from walk(child)
+
+    by_title = {}
+    for node in walk(ForwardNodeData(children=roots)):
+        lines = node.text().splitlines()
+        if lines and ". " in lines[0]:
+            by_title[lines[0].split(". ", 1)[1]] = node
+
+    def is_heading(text: str) -> bool:
+        head = text.splitlines()[0] if text else ""
+        return bool(head) and head.split(". ", 1)[0].replace(".", "").isdigit()
+
+    for section in sections:
+        node = by_title[section.title]
+        expected = [block.text for block in section.blocks if block.text]
+        # 内容块与「子标题节点」按原始顺序混排在 children 中
+        content_children = [child for child in node.children if not is_heading(child.text())]
+        assert [child.text() for child in content_children] == expected
 
 
 def test_list_items_become_child_nodes(class_2524_html: str) -> None:
     meta, sections = load(class_2524_html)
     builder = ForwardTreeBuilder({"include_images": False})
     roots = builder.build_body(sections)
-    links = roots[4]
+    links = roots[2]
     assert len(links.children) == 10
     assert links.children[0].text() == "CEU 模组的全部功能（加入能源转换器，实现 FE 与 EU 的相互转换）；"
     assert links.children[9].text() == "CraftTweaker 联动（本模组支持 CrT 脚本）。"
@@ -95,7 +114,7 @@ def test_images_become_child_nodes_too(class_2524_html: str) -> None:
     builder = ForwardTreeBuilder({})
     fake_images(builder, meta, sections)
     roots = builder.build_body(sections)
-    gallery = roots[-1]
+    gallery = roots[-1]  # 4. 画廊
     assert len(gallery.children) == 7
     assert all(len(child.images()) == 1 for child in gallery.children)
     assert gallery.children[0].text() == "新的多方块"
@@ -108,7 +127,7 @@ def test_images_can_be_disabled(class_2524_html: str) -> None:
     fake_images(builder, meta, sections)
     roots = builder.build_body(sections)
     gallery = roots[-1]
-    assert gallery.text() == "6. 画廊"  # 标题保留，图片被跳过
+    assert gallery.text() == "4. 画廊"  # 标题保留，图片被跳过
     assert gallery.children == []
     assert not any(count_images(root) for root in roots)
 
@@ -194,9 +213,9 @@ def test_plain_fallback_order(class_2524_html: str) -> None:
     assert texts[0].startswith("1.1 [GCY] Gregicality Legacy")
     assert any(text.startswith("1.2 热度: 5.0（名扬天下）") for text in texts)
     joined = "\n".join(texts)
-    # 概览占 1，正文标题顺延为 2~7
-    assert "6.1 CEU 模组的全部功能" in joined
-    assert "6.10 CraftTweaker 联动" in joined
+    # 概览占 1，正文标题顺延为 2~5
+    assert "4.1 CEU 模组的全部功能" in joined
+    assert "4.10 CraftTweaker 联动" in joined
     images = [
         item for message in messages for item in message if isinstance(item, Comp.Image)
     ]

@@ -255,27 +255,47 @@ class ForwardTreeBuilder:
 
     # ------------------------------------------------------------------ 正文
     def build_body(self, sections: Sequence[Section]) -> List[ForwardNodeData]:
-        """正文：每个标题一个节点，标题下的每个内容块再套一层子转发节点。"""
-        roots: List[ForwardNodeData] = []
-        number = 0
+        """正文：按 common-text-title 的层级递归构造「标题 → 子转发」节点。
+
+        mcmod 的标题自带层级（``common-text-title-1/2/3``），因此:
+
+            common-text-title-1  →  1. 内容展示
+            common-text-title-2  →  1.1 科技模块
+            common-text-title-3  →  1.1.1 机械动力（Create）
+
+        标题与其下一个同级/更高级标题之间的内容块，按原始顺序成为该标题的子转发节点。
+        """
         image_budget = self.max_images if self.include_images else 0
+        roots: List[ForwardNodeData] = []
+        stack: List[Tuple[int, ForwardNodeData]] = []
+        counters: List[int] = []
 
         for section in sections:
-            number += 1
+            level = max(1, int(section.level or 1))
+            while stack and stack[-1][0] >= level:
+                stack.pop()
+            del counters[level:]  # 保留 1..level 级计数，重置更深层
+            while len(counters) < level:
+                counters.append(0)
+            counters[level - 1] += 1
+            number = ".".join(str(value) for value in counters)
+
             node = self._section_node(section, number, image_budget)
-            if node is None:
-                number -= 1
-                continue
             image_budget -= count_images(node)
-            roots.append(node)
+
+            if stack:
+                stack[-1][1].children.append(node)
+            else:
+                roots.append(node)
+            stack.append((level, node))
         return roots
 
     def _section_node(
         self,
         section: Section,
-        number: int,
+        number: str,
         image_budget: int,
-    ) -> Optional[ForwardNodeData]:
+    ) -> ForwardNodeData:
         title = f"{number}. {section.title}" if section.title else f"{number}. 正文"
         node = ForwardNodeData(blocks=[("text", title)])
         for block in section.blocks:
@@ -286,7 +306,7 @@ class ForwardTreeBuilder:
         return node
 
     def _block_node(self, block, image_budget: int) -> Optional[ForwardNodeData]:
-        """一个内容块 → 一个子转发节点（图片块带标题行）。"""
+        """一个内容块 → 一个子转发节点（图片块带图片与图注）。"""
         if block.kind == "figure":
             if image_budget <= 0 or block.figure is None:
                 return None
